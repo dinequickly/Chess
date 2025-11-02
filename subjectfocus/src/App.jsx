@@ -1,0 +1,48 @@
+import { Routes, Route, Navigate } from 'react-router-dom'
+import NavBar from './components/NavBar'
+import ProtectedRoute from './components/ProtectedRoute'
+import Login from './pages/Login'
+import Signup from './pages/Signup'
+import Dashboard from './pages/Dashboard'
+import CreateStudySet from './pages/CreateStudySet'
+import StudySetDetail from './pages/StudySetDetail'
+
+export default function App() {
+  return (
+    <div className="min-h-full flex flex-col">
+      <NavBar />
+      <div className="flex-1">
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/study-set/new"
+            element={
+              <ProtectedRoute>
+                <CreateStudySet />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/study-set/:id"
+            element={
+              <ProtectedRoute>
+                <StudySetDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
+    </div>
+  )
+}
+
