@@ -47,8 +47,9 @@ function parseAssistantOutput(data) {
         : toolCall.arguments
       const term = parsed?.term || parsed?.question
       const definition = parsed?.definition || parsed?.answer
+      const studySetId = parsed?.study_set_id || parsed?.studySetId
       if (term && definition) {
-        flashcards.push({ term, definition })
+        flashcards.push({ term, definition, study_set_id: studySetId })
       }
     } catch (err) {
       console.error('Failed to parse tool call arguments', err)
@@ -85,13 +86,19 @@ export async function runAssistantChat({ apiKey, messages, context = {}, tempera
       {
         name: 'create_flashcard',
         type: 'function',
+        strict: true,
         function: {
           name: 'create_flashcard',
           description: 'Create a concise flashcard with a term and definition.',
           parameters: {
             type: 'object',
-            required: ['term', 'definition'],
+            additionalProperties: false,
+            required: ['study_set_id', 'term', 'definition'],
             properties: {
+              study_set_id: {
+                type: 'string',
+                description: 'The UUID of the target study set.',
+              },
               term: {
                 type: 'string',
                 description: 'A short phrase for the front of the flashcard.',

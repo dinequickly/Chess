@@ -186,7 +186,11 @@ export default function StudySetDetail() {
     cards: cards.map(card => ({ term: card.question, definition: card.answer })),
   }), [setData, cards])
 
-  async function handleAIFlashcard({ term, definition }) {
+  async function handleAIFlashcard({ term, definition, study_set_id: targetId }) {
+    if (targetId && targetId !== id) {
+      throw new Error('Assistant targeted a different study set')
+    }
+    if (!term || !definition) return
     const payload = {
       study_set_id: id,
       question: term.trim(),
