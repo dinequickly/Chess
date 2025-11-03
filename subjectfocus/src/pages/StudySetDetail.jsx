@@ -186,15 +186,26 @@ export default function StudySetDetail() {
     cards: cards.map(card => ({ term: card.question, definition: card.answer })),
   }), [setData, cards])
 
-  async function handleAIFlashcard({ term, definition, study_set_id: targetId }) {
-    if (targetId && targetId !== id) {
+  async function handleAIFlashcard(card) {
+    if (card.error) throw new Error(card.error)
+    const targetId = card.study_set_id || id
+    if (targetId !== id) {
       throw new Error('Assistant targeted a different study set')
     }
-    if (!term || !definition) return
+    const term = card.term?.trim()
+    const definition = card.definition?.trim()
+    if (!term || !definition) throw new Error('Missing term or definition')
+
+    if (card.id) {
+      setCards(prev => [...prev, { id: card.id, question: term, answer: definition }])
+      setSetData(prev => (prev ? { ...prev, total_cards: (prev.total_cards ?? cards.length) + 1 } : prev))
+      return
+    }
+
     const payload = {
       study_set_id: id,
-      question: term.trim(),
-      answer: definition.trim(),
+      question: term,
+      answer: definition,
     }
     const { data, error } = await supabase
       .from('flashcards')

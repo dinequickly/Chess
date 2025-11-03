@@ -7,9 +7,10 @@ Frontend (Vite):
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-Backend (serverless chat):
-- `OPENAI_API_KEY` (required)
-- `OPENAI_ASSISTANT_MODEL` (optional; defaults to `gpt-4.1-mini`)
+- Backend (serverless chat):
+  - `OPENAI_API_KEY` (required)
+  - `OPENAI_ASSISTANT_MODEL` (optional; defaults to `gpt-4.1-mini`)
+  - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` (required for auto-saving flashcards)
 
 Create `.env.local` in project root for Vite. For serverless in local dev, use `netlify dev` or `vercel dev` with env vars set.
 

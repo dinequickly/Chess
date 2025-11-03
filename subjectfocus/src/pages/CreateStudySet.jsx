@@ -28,13 +28,17 @@ export default function CreateStudySet() {
     cards: cards.map(card => ({ term: card.term, definition: card.definition })),
   }), [title, subject, description, cards])
 
-  async function handleAIFlashcard({ term, definition }) {
+  async function handleAIFlashcard(card) {
+    if (card.error) throw new Error(card.error)
+    const term = card.term?.trim()
+    const definition = card.definition?.trim()
+    if (!term || !definition) throw new Error('Missing term or definition')
     setCards(prev => ([
       ...prev,
       {
         id: (prev.at(-1)?.id ?? 0) + 1,
-        term: term.trim(),
-        definition: definition.trim(),
+        term,
+        definition,
       },
     ]))
   }

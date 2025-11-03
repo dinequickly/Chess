@@ -45,13 +45,16 @@ export default function AIChatPanel({ context = {}, onFlashcard }) {
     for (const card of flashcards) {
       if (!card?.term || !card?.definition) continue
       try {
-        await onFlashcard({ term: card.term, definition: card.definition })
+        if (card.error) throw new Error(card.error)
+        await onFlashcard(card)
         setMessages(prev => ([
           ...prev,
           {
             id: `system-card-${card.term}-${Date.now()}`,
             role: 'system',
-            content: `Added flashcard: “${card.term}”.`,
+            content: card.id
+              ? `Added flashcard to study set: “${card.term}”.`
+              : `Drafted flashcard “${card.term}”. Review before saving.`,
           },
         ]))
       } catch (err) {
