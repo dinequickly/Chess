@@ -83,17 +83,6 @@ export default function StudyGuideEditor() {
     }
   }
 
-  async function toggleStar() {
-    const newStarred = !guide.is_starred
-    const { error } = await supabase
-      .from('generated_content')
-      .update({ is_starred: newStarred })
-      .eq('id', guideId)
-    if (!error) {
-      setGuide({ ...guide, is_starred: newStarred })
-    }
-  }
-
   async function deleteGuide() {
     if (!confirm('Delete this study guide?')) return
     const { error } = await supabase
@@ -167,13 +156,6 @@ export default function StudyGuideEditor() {
                 Saved {lastSaved.toLocaleTimeString()}
               </span>
             )}
-            <button
-              onClick={toggleStar}
-              className="px-3 py-1.5 border rounded hover:bg-gray-50"
-              title={guide.is_starred ? 'Unstar' : 'Star'}
-            >
-              {guide.is_starred ? '⭐' : '☆'}
-            </button>
             <div className="relative group">
               <button className="px-3 py-1.5 border rounded hover:bg-gray-50">
                 Export ▾

@@ -27,17 +27,6 @@ export default function StudyGuideView() {
     return () => { mounted = false }
   }, [guideId])
 
-  async function toggleStar() {
-    const newStarred = !guide.is_starred
-    const { error } = await supabase
-      .from('generated_content')
-      .update({ is_starred: newStarred })
-      .eq('id', guideId)
-    if (!error) {
-      setGuide({ ...guide, is_starred: newStarred })
-    }
-  }
-
   function exportMarkdown() {
     if (!guide.content_text) return
     const turndownService = new TurndownService()
@@ -101,13 +90,6 @@ export default function StudyGuideView() {
               className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
             >
               Edit
-            </button>
-            <button
-              onClick={toggleStar}
-              className="px-3 py-1.5 border rounded hover:bg-gray-50"
-              title={guide.is_starred ? 'Unstar' : 'Star'}
-            >
-              {guide.is_starred ? '⭐' : '☆'}
             </button>
             <div className="relative group">
               <button className="px-3 py-1.5 border rounded hover:bg-gray-50">

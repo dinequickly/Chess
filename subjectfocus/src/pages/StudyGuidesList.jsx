@@ -28,7 +28,7 @@ export default function StudyGuidesList() {
       // Fetch study guides
       const { data: guidesData, error: guidesErr } = await supabase
         .from('generated_content')
-        .select('id, title, content_text, is_starred, created_at, updated_at, status')
+        .select('id, title, content_text, created_at, updated_at, status')
         .eq('study_set_id', id)
         .eq('content_type', 'study_guide')
         .order('updated_at', { ascending: false })
@@ -131,10 +131,7 @@ export default function StudyGuidesList() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-medium text-lg">{guide.title || 'Untitled'}</h3>
-                    {guide.is_starred && <span className="text-yellow-500">⭐</span>}
-                  </div>
+                  <h3 className="font-medium text-lg mb-1">{guide.title || 'Untitled'}</h3>
                   <p className="text-sm text-gray-600 mb-2">{getPreview(guide.content_text)}</p>
                   <p className="text-xs text-gray-500">
                     Last updated: {formatDate(guide.updated_at)}
