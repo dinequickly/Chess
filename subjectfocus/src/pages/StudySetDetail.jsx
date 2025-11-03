@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import AIChatPanel from '../components/AIChatPanel'
@@ -8,6 +8,7 @@ export default function StudySetDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [setData, setSetData] = useState(null)
   const [cards, setCards] = useState([])
   const [loading, setLoading] = useState(true)
@@ -60,11 +61,23 @@ export default function StudySetDetail() {
 
       const { data: cardsData } = await supabase
         .from('flashcards')
-        .select('id, question, answer')
+        .select('id, question, answer, starred')
         .eq('study_set_id', id)
         .is('deleted_at', null)
         .order('created_at', { ascending: true })
       setCards(cardsData || [])
+
+      // If editCard param exists, scroll to that card
+      const editCardId = searchParams.get('editCard')
+      if (editCardId) {
+        setTimeout(() => {
+          const cardElement = document.getElementById(`card-${editCardId}`)
+          if (cardElement) {
+            cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            setEditingId(editCardId)
+          }
+        }, 100)
+      }
 
       // fetch generated content type counts for this set
       const { data: gcData } = await supabase
@@ -83,7 +96,7 @@ export default function StudySetDetail() {
       setLoading(false)
     })()
     return () => { mounted = false }
-  }, [id, canRender])
+  }, [id, canRender, searchParams])
 
   async function updateSet(e) {
     e.preventDefault()
@@ -159,6 +172,17 @@ export default function StudySetDetail() {
       .delete()
       .eq('id', card.id)
     if (!error) setCards(cs => cs.filter(c => c.id !== card.id))
+  }
+
+  async function toggleStar(card) {
+    const newStarred = !card.starred
+    const { error } = await supabase
+      .from('flashcards')
+      .update({ starred: newStarred })
+      .eq('id', card.id)
+    if (!error) {
+      setCards(cs => cs.map(c => c.id === card.id ? { ...c, starred: newStarred } : c))
+    }
   }
 
   // Create generated content rows and update counts
@@ -261,13 +285,27 @@ export default function StudySetDetail() {
       )}
 
       <div className="border rounded p-4">
-        <div className="mb-3 font-medium">Flashcards</div>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="font-medium">Flashcards</div>
+          {cards.length > 0 && (
+            <button
+              onClick={() => navigate(`/study-set/${id}/practice`)}
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+            >
+              Practice Flashcards
+            </button>
+          )}
+        </div>
         {cards.length === 0 ? (
           <div className="text-sm text-gray-700">No flashcards yet. Add your first card!</div>
         ) : (
           <ul className="space-y-2">
             {cards.map(card => (
-              <li key={card.id} className="border rounded p-3 flex items-start justify-between">
+              <li
+                key={card.id}
+                id={`card-${card.id}`}
+                className={`border rounded p-3 flex items-start justify-between ${editingId === card.id ? 'ring-2 ring-indigo-500' : ''}`}
+              >
                 {editingId === card.id ? (
                   <div className="w-full">
                     <div className="grid gap-2 sm:grid-cols-2">
@@ -286,6 +324,13 @@ export default function StudySetDetail() {
                       <div className="text-gray-700">Definition: {card.answer}</div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleStar(card)}
+                        className="text-xl"
+                        title={card.starred ? 'Unstar' : 'Star'}
+                      >
+                        {card.starred ? '⭐' : '☆'}
+                      </button>
                       <button onClick={() => startEdit(card)} className="text-sm underline">Edit</button>
                       <button onClick={() => deleteCard(card)} className="text-sm text-red-600 underline">Delete</button>
                     </div>

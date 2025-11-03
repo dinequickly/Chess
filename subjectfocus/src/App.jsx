@@ -6,6 +6,7 @@ import Signup from './pages/Signup'
 import Dashboard from './pages/Dashboard'
 import CreateStudySet from './pages/CreateStudySet'
 import StudySetDetail from './pages/StudySetDetail'
+import PracticeMode from './pages/PracticeMode'
 
 export default function App() {
   return (
@@ -36,6 +37,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <StudySetDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/study-set/:id/practice"
+            element={
+              <ProtectedRoute>
+                <PracticeMode />
               </ProtectedRoute>
             }
           />
