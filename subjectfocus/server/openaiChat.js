@@ -98,7 +98,7 @@ export async function runAssistantChat({ apiKey, messages, context = {}, tempera
   // Define response schema based on mode
   const responseSchema = isStudyGuide ? {
     name: "study_guide_response",
-    strict: true,
+    strict: false,
     schema: {
       type: "object",
       properties: {
@@ -108,7 +108,7 @@ export async function runAssistantChat({ apiKey, messages, context = {}, tempera
         },
         content: {
           type: "string",
-          description: "HTML formatted study guide content to insert"
+          description: "HTML formatted study guide content to insert - MUST be populated with actual content"
         }
       },
       required: ["message", "content"],
