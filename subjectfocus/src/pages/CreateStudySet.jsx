@@ -21,6 +21,7 @@ export default function CreateStudySet() {
   const navigate = useNavigate()
 
   const chatContext = useMemo(() => ({
+    study_set_id: undefined,
     title: title || undefined,
     subject: subject || undefined,
     description: description || undefined,

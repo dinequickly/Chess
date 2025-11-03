@@ -179,6 +179,7 @@ export default function StudySetDetail() {
   }
 
   const chatContext = useMemo(() => ({
+    study_set_id: id,
     title: setData?.title,
     subject: setData?.subject_area,
     description: setData?.description,

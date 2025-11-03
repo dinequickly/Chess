@@ -8,6 +8,7 @@ const SYSTEM_PROMPT = `You are SubjectFocus, an assistant that helps students cr
 
 function formatContext(context = {}) {
   const parts = []
+  if (context.study_set_id) parts.push(`Study set ID: ${context.study_set_id}`)
   if (context.title) parts.push(`Title: ${context.title}`)
   if (context.subject) parts.push(`Subject area: ${context.subject}`)
   if (context.description) parts.push(`Description: ${context.description}`)
