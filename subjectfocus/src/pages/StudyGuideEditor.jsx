@@ -1,21 +1,27 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { supabase } from '../supabaseClient'
+import { useAuth } from '../hooks/useAuth'
+import StudyGuideAIPanel from '../components/StudyGuideAIPanel'
 import jsPDF from 'jspdf'
 import TurndownService from 'turndown'
 
 export default function StudyGuideEditor() {
   const { id, guideId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [guide, setGuide] = useState(null)
+  const [setData, setSetData] = useState(null)
+  const [cards, setCards] = useState([])
   const [title, setTitle] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
+  const [aiPanelOpen, setAiPanelOpen] = useState(false)
 
   // TipTap Editor
   const editor = useEditor({
@@ -35,6 +41,7 @@ export default function StudyGuideEditor() {
   useEffect(() => {
     let mounted = true
     ;(async () => {
+      // Fetch guide
       const { data, error: fetchErr } = await supabase
         .from('generated_content')
         .select('*')
@@ -47,10 +54,27 @@ export default function StudyGuideEditor() {
       if (editor && data.content_text) {
         editor.commands.setContent(data.content_text)
       }
+
+      // Fetch study set info and cards for AI context
+      const { data: setRow } = await supabase
+        .from('study_sets')
+        .select('id, title, description, subject_area')
+        .eq('id', id)
+        .single()
+      if (setRow) setSetData(setRow)
+
+      const { data: cardsData } = await supabase
+        .from('flashcards')
+        .select('id, question, answer')
+        .eq('study_set_id', id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+      setCards(cardsData || [])
+
       setLoading(false)
     })()
     return () => { mounted = false }
-  }, [guideId])
+  }, [guideId, id, editor])
 
   // Debounced save function
   const debouncedSave = useCallback(
@@ -93,6 +117,24 @@ export default function StudyGuideEditor() {
       setError(error.message)
     } else {
       navigate(`/study-set/${id}/guides`)
+    }
+  }
+
+  // AI context
+  const aiContext = useMemo(() => ({
+    study_set_id: id,
+    user_id: user?.id,
+    title: setData?.title,
+    subject: setData?.subject_area,
+    description: setData?.description,
+    currentContent: editor?.getText() || '',
+    cards: cards.map(card => ({ term: card.question, definition: card.answer })),
+  }), [setData, cards, editor, user, id])
+
+  function handleContentUpdate(htmlContent) {
+    if (editor && htmlContent) {
+      // Insert at current cursor position or append to end
+      editor.chain().focus().insertContent(htmlContent).run()
     }
   }
 
@@ -156,6 +198,12 @@ export default function StudyGuideEditor() {
                 Saved {lastSaved.toLocaleTimeString()}
               </span>
             )}
+            <button
+              onClick={() => setAiPanelOpen(!aiPanelOpen)}
+              className={`px-3 py-1.5 border rounded ${aiPanelOpen ? 'bg-indigo-100 border-indigo-300' : 'hover:bg-gray-50'}`}
+            >
+              🤖 AI Assistant
+            </button>
             <div className="relative group">
               <button className="px-3 py-1.5 border rounded hover:bg-gray-50">
                 Export ▾
@@ -236,9 +284,27 @@ export default function StudyGuideEditor() {
       )}
 
       {/* Editor Content */}
-      <div className="max-w-5xl mx-auto p-6">
-        <div className="bg-white rounded-lg shadow-sm border p-8 min-h-[600px]">
-          <EditorContent editor={editor} className="prose max-w-none" />
+      <div className={`mx-auto p-6 ${aiPanelOpen ? 'max-w-7xl' : 'max-w-5xl'}`}>
+        <div className={`grid gap-6 ${aiPanelOpen ? 'grid-cols-12' : 'grid-cols-1'}`}>
+          {/* Main Editor */}
+          <div className={aiPanelOpen ? 'col-span-8' : 'col-span-12'}>
+            <div className="bg-white rounded-lg shadow-sm border p-8 min-h-[600px]">
+              <EditorContent editor={editor} className="prose max-w-none" />
+            </div>
+          </div>
+
+          {/* AI Panel */}
+          {aiPanelOpen && (
+            <div className="col-span-4">
+              <div className="sticky top-[120px]">
+                <h3 className="text-lg font-medium mb-3">AI Assistant</h3>
+                <StudyGuideAIPanel
+                  context={aiContext}
+                  onContentUpdate={handleContentUpdate}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
