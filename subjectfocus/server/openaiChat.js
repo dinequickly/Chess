@@ -174,7 +174,6 @@ export async function runAssistantChat({ apiKey, messages, context = {}, tempera
             study_set_id: targetId,
             question: card.term,
             answer: card.definition,
-            user_id,
           })
           .select('id, question, answer')
           .single()
