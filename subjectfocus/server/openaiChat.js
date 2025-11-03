@@ -149,6 +149,8 @@ export async function runAssistantChat({ apiKey, messages, context = {}, tempera
   })
 
   const data = await response.json()
+  console.log('=== FULL OPENAI RESPONSE ===')
+  console.log(JSON.stringify(data, null, 2))
   if (!response.ok) {
     const error = new Error('OpenAI request failed')
     error.status = response.status
