@@ -23,25 +23,14 @@ export default function TakePracticeTest() {
 
   useEffect(() => {
     fetchPracticeTest()
+
+    // Set up polling interval immediately
+    const interval = setInterval(() => {
+      fetchPracticeTest()
+    }, 3000)
+
+    return () => clearInterval(interval)
   }, [testId])
-
-  useEffect(() => {
-    // Poll for test generation
-    if (practiceTest && practiceTest.status === 'generating') {
-      console.log('🔄 Starting polling for test generation...')
-      const interval = setInterval(() => {
-        console.log('📡 Polling for test updates...')
-        fetchPracticeTest()
-      }, 3000)
-
-      return () => {
-        console.log('⏹️ Stopping polling')
-        clearInterval(interval)
-      }
-    } else if (practiceTest) {
-      console.log('✅ Test status:', practiceTest.status)
-    }
-  }, [practiceTest?.status, testId])
 
   useEffect(() => {
     // Start timer when test starts
