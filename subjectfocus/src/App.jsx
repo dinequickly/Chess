@@ -10,6 +10,9 @@ import PracticeMode from './pages/PracticeMode'
 import StudyGuidesList from './pages/StudyGuidesList'
 import StudyGuideView from './pages/StudyGuideView'
 import StudyGuideEditor from './pages/StudyGuideEditor'
+import PodcastsList from './pages/PodcastsList'
+import CreatePodcast from './pages/CreatePodcast'
+import PodcastPlayer from './pages/PodcastPlayer'
 
 export default function App() {
   return (
@@ -72,6 +75,30 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <StudyGuideEditor />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/study-set/:id/podcasts"
+            element={
+              <ProtectedRoute>
+                <PodcastsList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/study-set/:id/podcasts/create"
+            element={
+              <ProtectedRoute>
+                <CreatePodcast />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/study-set/:id/podcasts/:podcastId"
+            element={
+              <ProtectedRoute>
+                <PodcastPlayer />
               </ProtectedRoute>
             }
           />
