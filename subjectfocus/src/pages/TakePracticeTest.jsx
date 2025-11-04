@@ -28,13 +28,20 @@ export default function TakePracticeTest() {
   useEffect(() => {
     // Poll for test generation
     if (practiceTest && practiceTest.status === 'generating') {
+      console.log('🔄 Starting polling for test generation...')
       const interval = setInterval(() => {
+        console.log('📡 Polling for test updates...')
         fetchPracticeTest()
       }, 3000)
 
-      return () => clearInterval(interval)
+      return () => {
+        console.log('⏹️ Stopping polling')
+        clearInterval(interval)
+      }
+    } else if (practiceTest) {
+      console.log('✅ Test status:', practiceTest.status)
     }
-  }, [practiceTest])
+  }, [practiceTest?.status, testId])
 
   useEffect(() => {
     // Start timer when test starts
@@ -69,6 +76,14 @@ export default function TakePracticeTest() {
       setLoading(false)
       return
     }
+
+    console.log('📥 Fetched practice test:', {
+      id: data.id,
+      status: data.status,
+      title: data.title,
+      hasQuestions: !!data.content_metadata?.questions?.length,
+      questionCount: data.content_metadata?.questions?.length || 0
+    })
 
     setPracticeTest(data)
     setLoading(false)
@@ -170,9 +185,15 @@ export default function TakePracticeTest() {
           </div>
           <h2 className="text-xl font-semibold mb-2">Generating Your Practice Test</h2>
           <p className="text-gray-600">
-            AI is creating {practiceTest.metadata?.total_questions || 0} questions based on your study materials...
+            AI is creating {practiceTest.content_metadata?.total_questions || 0} questions based on your study materials...
           </p>
           <p className="text-sm text-gray-500 mt-4">This usually takes 10-30 seconds</p>
+          <button
+            onClick={() => fetchPracticeTest()}
+            className="mt-4 px-4 py-2 text-sm text-indigo-600 hover:text-indigo-700 underline"
+          >
+            Refresh Status
+          </button>
         </div>
       </div>
     )
@@ -196,17 +217,28 @@ export default function TakePracticeTest() {
     )
   }
 
-  // Check if test is ready (completed or ready status)
-  const isTestReady = practiceTest.status === 'completed' || practiceTest.status === 'ready'
+  // Check if test is ready (must be 'completed' status)
+  // NOTE: Valid statuses are: pending, generating, completed, failed
+  const isTestReady = practiceTest.status === 'completed'
   if (!isTestReady) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-sm border p-8 max-w-md text-center">
           <h2 className="text-xl font-semibold mb-2">Test Not Ready</h2>
-          <p className="text-gray-600 mb-4">This test has an unexpected status: {practiceTest.status}</p>
+          <p className="text-gray-600 mb-4">
+            This test has status: <strong>{practiceTest.status}</strong>
+            <br />
+            <span className="text-sm">Valid statuses: pending, generating, completed, failed</span>
+          </p>
+          <button
+            onClick={() => fetchPracticeTest()}
+            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 mr-2"
+          >
+            Refresh
+          </button>
           <button
             onClick={() => navigate(`/study-set/${id}/practice-tests`)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+            className="px-4 py-2 border rounded hover:bg-gray-50"
           >
             Back to Practice Tests
           </button>

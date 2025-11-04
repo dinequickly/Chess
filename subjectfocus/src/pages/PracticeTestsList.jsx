@@ -49,21 +49,22 @@ export default function PracticeTestsList() {
 
   function getStatusBadge(status) {
     const styles = {
+      pending: 'bg-gray-100 text-gray-800',
       generating: 'bg-yellow-100 text-yellow-800',
       completed: 'bg-green-100 text-green-800',
-      ready: 'bg-green-100 text-green-800',
       failed: 'bg-red-100 text-red-800'
     }
-    const label = status === 'ready' ? 'Ready' : status.charAt(0).toUpperCase() + status.slice(1)
+    const label = status.charAt(0).toUpperCase() + status.slice(1)
     return (
-      <span className={`px-2 py-1 rounded text-xs font-medium ${styles[status] || ''}`}>
+      <span className={`px-2 py-1 rounded text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-800'}`}>
         {label}
       </span>
     )
   }
 
   function isTestReady(test) {
-    return test.status === 'completed' || test.status === 'ready'
+    // Only 'completed' status means test is ready to take
+    return test.status === 'completed'
   }
 
   function getSourceLabel(sourceType) {
