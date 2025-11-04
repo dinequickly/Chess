@@ -59,8 +59,9 @@ supabase db lint                                  # Check for invalid references
 - `/study-set/:id/guides/:guideId/edit` - Edit study guide with TipTap editor
 - `/study-set/:id/podcasts` - Podcasts list for a study set
 - `/study-set/:id/podcasts/create` - Create new podcast
-- `/study-set/:id/podcasts/:podcastId` - Podcast player
-- `/study-set/:setId/podcasts/:podcastId/interactive` - Live interactive podcast with ElevenLabs
+- `/study-set/:id/podcasts/:podcastId` - Podcast player (handles pre-recorded audio and static video)
+- `/study-set/:setId/podcasts/:podcastId/interactive` - Live interactive podcast with ElevenLabs voice chat
+- `/study-set/:setId/podcasts/:podcastId/tutor-session` - Live tutor session with split screen (slides + voice chat)
 
 ### Components
 - `ProtectedRoute` - Wraps authenticated routes, redirects to `/login`
@@ -68,6 +69,8 @@ supabase db lint                                  # Check for invalid references
 - `AIChatPanel` - Right sidebar for AI flashcard generation (mode: 'flashcard')
 - `StudyGuideAIPanel` - Right sidebar for AI study guide generation (mode: 'study_guide')
 - `LiveInteractivePodcast` - Real-time conversational podcast using ElevenLabs Conversational AI
+- `LiveTutorSession` - Split-screen tutor session (left: slides via SlideViewer, right: ElevenLabs voice interface)
+- `SlideViewer` - Displays slides with metadata (title, notes) and fade transitions, listens to Supabase Realtime for updates
 
 ### Backend Architecture
 The app uses **serverless functions** deployed on Netlify OR Vercel (not both) to handle AI requests:
@@ -119,9 +122,12 @@ The app uses **serverless functions** deployed on Netlify OR Vercel (not both) t
   - `content_type` enum: 'podcast', 'video', 'newsletter', 'study_guide', 'practice_test', 'brief', 'mindmap', 'quiz', 'flashcard_set'
   - `status` enum: 'pending', 'generating', 'completed', 'failed'
 - `podcasts` - Podcast episodes (separate from generated_content)
-  - Fields: `study_set_id`, `user_id`, `title`, `type`, `duration_minutes`, `user_goal`, `status`, `audio_url`, `script`
-  - Status values: 'generating', 'completed', 'failed'
-  - Type values determine podcast format (pre-recorded, live-interactive, etc.)
+  - Fields: `study_set_id`, `user_id`, `title`, `type`, `duration_minutes`, `user_goal`, `status`, `audio_url`, `video_url`, `script`, `slides`, `current_slide_number`
+  - Status values: 'generating', 'ready', 'failed'
+  - Type values: 'pre-recorded', 'live-interactive', 'live-tutor', 'static-video'
+  - `video_url` - URL to video file for static-video type
+  - `slides` - JSONB array of slide objects: `[{url, order, title, notes}]`
+  - `current_slide_number` - Current slide index for live-tutor (updated by ElevenLabs agent via webhook)
 - `calendar_events` - Study schedule events
 - `tags`, `study_set_tags` - Tagging system
 - `study_set_collaborators` - Sharing with role-based access
@@ -183,30 +189,58 @@ Store frontend vars in `.env.local` at project root. For serverless, use platfor
 
 ### Podcasts
 - Users create podcasts linked to study sets
-- **Three podcast types:**
-  1. **Pre-recorded podcasts** (listen-only):
-     - CreatePodcast → insert with status='generating' → fire webhook call to `/api/generate-podcast` → immediately navigate to PodcastPlayer
+- **Four podcast types:**
+
+  1. **Pre-recorded (audio-only):**
+     - CreatePodcast → insert with status='generating' → navigate immediately → fire webhook to `/api/generate-podcast`
      - PodcastPlayer polls every 10 seconds until status='ready' and audio_url is available
-  2. **Live-tutor podcasts** (Q&A session):
-     - CreatePodcast → insert with status='generating' → navigate immediately → fire webhook call to `https://maxipad.app.n8n.cloud/webhook/d5657317-09f9-4d0b-b14c-217275d6e97c`
-     - Webhook generates Q&A tutor script using LLM
-     - PodcastPlayer polls every 3 seconds until status='ready'
-     - Once ready, automatically redirects to `/study-set/:id/podcasts/:podcastId/interactive`
-     - Uses ElevenLabs Conversational AI for interactive Q&A
-  3. **Live-interactive podcasts** (discussion):
-     - CreatePodcast → insert with status='generating' → navigate immediately → fire webhook call to `https://maxipad.app.n8n.cloud/webhook/generate-interactive-podcast`
+     - Displays audio player in PodcastPlayer component
+
+  2. **Live-interactive (discussion):**
+     - CreatePodcast → insert with status='generating' → navigate immediately → fire webhook to `https://maxipad.app.n8n.cloud/webhook/generate-interactive-podcast`
      - Webhook generates conversational guide/script using LLM (takes ~4 seconds)
      - PodcastPlayer polls every 3 seconds until status='ready'
      - Once ready, automatically redirects to `/study-set/:id/podcasts/:podcastId/interactive`
      - LiveInteractivePodcast component uses ElevenLabs Conversational AI (@elevenlabs/client)
-- **Interactive podcasts (live-tutor and live-interactive):**
+     - Voice-only interface with status indicators (speaking/listening modes)
+
+  3. **Live-tutor (Q&A with slides):**
+     - CreatePodcast → insert with status='generating' → navigate immediately → fire webhook to `https://maxipad.app.n8n.cloud/webhook/9bba5bd1-ffec-42fb-b47e-2bb937c421ef`
+     - Webhook generates script and slides using LLM
+     - PodcastPlayer polls every 3 seconds until status='ready'
+     - Once ready, automatically redirects to `/study-set/:setId/podcasts/:podcastId/tutor-session`
+     - LiveTutorSession component: split-screen layout (grid-cols-2)
+       - Left: SlideViewer displaying slides with fade transitions
+       - Right: ElevenLabs voice interface
+     - Supabase Realtime subscription listens for current_slide_number updates
+     - ElevenLabs agent has "Change Slide" tool that calls webhook: `https://maxipad.app.n8n.cloud/webhook/b580708f-48db-4e93-aa0e-f9cbb4880f75`
+     - Webhook updates current_slide_number in Supabase → Realtime pushes to frontend → SlideViewer updates
+     - Slides stored as JSONB: `[{url, order, title, notes}]`
+
+  4. **Static-video (YouTube-style):**
+     - CreatePodcast → insert with status='generating' → navigate immediately → fire webhook to `https://maxipad.app.n8n.cloud/webhook/d5657317-09f9-4d0b-b14c-217275d6e97c`
+     - Webhook generates video file using LLM
+     - PodcastPlayer polls every 10 seconds until status='ready' and video_url is available
+     - Displays video player in PodcastPlayer component
+
+- **ElevenLabs Integration (live-interactive and live-tutor):**
   - Script format in DB: `{script: [{ speaker: 'sam', text: '...' }]}` or `[{ speaker: 'sam', text: '...' }]`
-  - Frontend handles both nested and flat array structures
+  - Frontend handles both nested and flat array structures via `formatScript()` helper
   - Script is formatted as text (`"sam: text\n\nsam: text..."`) and passed to ElevenLabs via `dynamicVariables`
-  - Dynamic variables: `topic` (user_goal), `script` (formatted text)
+  - Dynamic variables passed at session start:
+    - `topic`: user_goal or podcast title
+    - `script`: formatted script text
+    - `Current_Slide_Number` (live-tutor only): current slide index as string
   - Agent ID stored in `VITE_INTERACTIVE_AGENT_ID` env var
-- Webhook calls use "fire and forget" pattern (wrapped in setTimeout) to prevent blocking navigation
-- Script is stored as structured data in the `script` field (JSONB)
+  - onModeChange callback tracks 'speaking' vs 'listening' states
+
+- **Technical Details:**
+  - Webhook calls use "fire and forget" pattern (wrapped in setTimeout) to prevent blocking navigation
+  - Polling intervals: 3s for interactive types (fast generation), 10s for pre-recorded/video (slow generation)
+  - Script stored as JSONB in `script` field
+  - Slides stored as JSONB in `slides` field
+  - current_slide_number updated via webhook from ElevenLabs agent tool
+  - Supabase Realtime channel: `podcast-{podcastId}` listens for UPDATE events on podcasts table
 
 ### Database Triggers
 - `update_study_set_card_count()` - Maintains `total_cards` count when flashcards inserted/deleted

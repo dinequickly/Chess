@@ -16,10 +16,14 @@ export default function PodcastPlayer() {
     fetchPodcast()
   }, [podcastId])
 
-  // Redirect to interactive page for live-interactive and live-tutor podcasts once ready
+  // Redirect to appropriate interactive page based on type once ready
   useEffect(() => {
-    if (podcast && (podcast.type === 'live-interactive' || podcast.type === 'live-tutor') && podcast.status === 'ready') {
+    if (!podcast || podcast.status !== 'ready') return
+
+    if (podcast.type === 'live-interactive') {
       navigate(`/study-set/${id}/podcasts/${podcastId}/interactive`)
+    } else if (podcast.type === 'live-tutor') {
+      navigate(`/study-set/${id}/podcasts/${podcastId}/tutor-session`)
     }
   }, [podcast, id, podcastId, navigate])
 
@@ -33,7 +37,7 @@ export default function PodcastPlayer() {
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from('podcasts')
-        .select('status, audio_url, script')
+        .select('status, audio_url, video_url, script, slides, current_slide_number')
         .eq('id', podcastId)
         .single()
 
@@ -234,6 +238,8 @@ export default function PodcastPlayer() {
                   ? 'Preparing Interactive Podcast...'
                   : podcast.type === 'live-tutor'
                   ? 'Preparing Live Tutor Session...'
+                  : podcast.type === 'static-video'
+                  ? 'Generating Video...'
                   : 'Generating Podcast...'}
               </h2>
               <p className="text-gray-600">
@@ -241,6 +247,8 @@ export default function PodcastPlayer() {
                   ? 'Creating a conversational guide for your interactive session. This will take just a moment.'
                   : podcast.type === 'live-tutor'
                   ? 'Setting up your personalized Q&A tutor session. This will take just a moment.'
+                  : podcast.type === 'static-video'
+                  ? 'Your video is being created. This may take a few minutes depending on the length and complexity.'
                   : 'This may take a few moments. Your podcast is being created based on your preferences.'}
               </p>
               {podcast.user_goal && (
@@ -268,6 +276,33 @@ export default function PodcastPlayer() {
                 >
                   Your browser does not support audio playback.
                 </audio>
+              </div>
+
+              {podcast.user_goal && (
+                <div className="p-4 bg-gray-50 rounded">
+                  <div className="text-sm font-medium text-gray-700 mb-1">Your Goal:</div>
+                  <div className="text-sm text-gray-600">{podcast.user_goal}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {podcast.status === 'ready' && podcast.video_url && podcast.type === 'static-video' && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-xl font-medium mb-2">Ready to Watch</h2>
+                <p className="text-gray-600">Your video is ready!</p>
+              </div>
+
+              {/* Video Player */}
+              <div className="bg-black rounded-lg overflow-hidden">
+                <video
+                  controls
+                  className="w-full"
+                  src={podcast.video_url}
+                >
+                  Your browser does not support video playback.
+                </video>
               </div>
 
               {podcast.user_goal && (
