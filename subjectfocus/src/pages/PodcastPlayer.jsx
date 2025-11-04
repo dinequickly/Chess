@@ -137,8 +137,63 @@ export default function PodcastPlayer() {
   }
 
   if (loading) return <div className="p-6">Loading podcast...</div>
-  if (error) return <div className="p-6 text-red-600">{error}</div>
-  if (!podcast) return <div className="p-6">Podcast not found</div>
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-lg shadow-sm border p-8 max-w-md text-center">
+          <div className="text-red-600 text-5xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Podcast</h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <p className="text-gray-600 text-sm mb-6">
+            If you just created this podcast, please wait 5 seconds and refresh the page.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+            >
+              Refresh Now
+            </button>
+            <button
+              onClick={() => navigate(`/study-set/${id}/podcasts`)}
+              className="px-4 py-2 border rounded hover:bg-gray-50"
+            >
+              Back to Podcasts
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!podcast) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-lg shadow-sm border p-8 max-w-md text-center">
+          <div className="text-gray-400 text-5xl mb-4">🎙️</div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Podcast Not Found</h2>
+          <p className="text-gray-600 mb-6">
+            If you just created this podcast, please wait 5 seconds and refresh the page.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+            >
+              Refresh Now
+            </button>
+            <button
+              onClick={() => navigate(`/study-set/${id}/podcasts`)}
+              className="px-4 py-2 border rounded hover:bg-gray-50"
+            >
+              Back to Podcasts
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
