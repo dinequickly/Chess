@@ -187,15 +187,17 @@ Store frontend vars in `.env.local` at project root. For serverless, use platfor
   - CreatePodcast → insert with status='generating' → fire webhook call to `/api/generate-podcast` → immediately navigate to PodcastPlayer
   - PodcastPlayer polls every 10 seconds until status='ready' and audio_url is available
 - **Live-interactive podcasts:**
-  - CreatePodcast → insert with status='generating' → fire webhook call to `https://maxipad.app.n8n.cloud/webhook/generate-interactive-podcast` → immediately navigate to PodcastPlayer
-  - Webhook generates conversational guide/script using LLM
+  - CreatePodcast → insert with status='generating' → navigate immediately → fire webhook call to `https://maxipad.app.n8n.cloud/webhook/generate-interactive-podcast`
+  - Webhook generates conversational guide/script using LLM (takes ~4 seconds)
   - PodcastPlayer polls every 3 seconds until status='ready'
   - Once ready, automatically redirects to `/study-set/:id/podcasts/:podcastId/interactive`
   - LiveInteractivePodcast component uses ElevenLabs Conversational AI (@elevenlabs/client)
-  - Script format: array of `{ speaker: 'sam', text: '...' }` objects
-  - Script is formatted as text and passed to ElevenLabs as the `script` variable
+  - Script format in DB: `{script: [{ speaker: 'sam', text: '...' }]}` or `[{ speaker: 'sam', text: '...' }]`
+  - Frontend handles both nested and flat array structures
+  - Script is formatted as text (`"sam: text\n\nsam: text..."`) and passed to ElevenLabs via `dynamicVariables`
+  - Dynamic variables: `topic` (user_goal), `script` (formatted text)
   - Agent ID stored in `VITE_INTERACTIVE_AGENT_ID` env var
-- Webhook calls use "fire and forget" pattern (no await) for instant navigation
+- Webhook calls use "fire and forget" pattern (wrapped in setTimeout) to prevent blocking navigation
 - Script is stored as structured data in the `script` field (JSONB)
 
 ### Database Triggers

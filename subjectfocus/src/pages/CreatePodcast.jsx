@@ -119,21 +119,24 @@ export default function CreatePodcast() {
 
       if (insertErr) throw insertErr
 
-      // Start generation based on podcast type (fire and forget - don't await)
-      if (formData.type === 'live-interactive') {
-        // Call n8n webhook to generate interactive script
-        startInteractiveGeneration(podcast).catch(err => {
-          console.error('Failed to start interactive generation:', err)
-        })
-      } else {
-        // Call the pre-recorded podcast generation endpoint
-        startPreRecordedGeneration(podcast).catch(err => {
-          console.error('Failed to start pre-recorded generation:', err)
-        })
-      }
-
       // Navigate immediately to the player page (where polling will happen)
       navigate(`/study-set/${id}/podcasts/${podcast.id}`)
+
+      // Start generation based on podcast type (fire and forget - don't await)
+      // Run in setTimeout to ensure navigation happens first
+      setTimeout(() => {
+        if (formData.type === 'live-interactive') {
+          // Call n8n webhook to generate interactive script
+          startInteractiveGeneration(podcast).catch(err => {
+            console.error('Failed to start interactive generation:', err)
+          })
+        } else {
+          // Call the pre-recorded podcast generation endpoint
+          startPreRecordedGeneration(podcast).catch(err => {
+            console.error('Failed to start pre-recorded generation:', err)
+          })
+        }
+      }, 0)
     } catch (err) {
       console.error('Create podcast error', err)
       setError(err.message || 'Failed to create podcast')
