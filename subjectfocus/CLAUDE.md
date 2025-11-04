@@ -184,17 +184,18 @@ Store frontend vars in `.env.local` at project root. For serverless, use platfor
 ### Podcasts
 - Users create podcasts linked to study sets
 - **Pre-recorded podcasts:**
-  - CreatePodcast → insert with status='generating' → call `/api/generate-podcast` → navigate to PodcastPlayer
-  - PodcastPlayer polls until status='ready' and audio_url is available
+  - CreatePodcast → insert with status='generating' → fire webhook call to `/api/generate-podcast` → immediately navigate to PodcastPlayer
+  - PodcastPlayer polls every 10 seconds until status='ready' and audio_url is available
 - **Live-interactive podcasts:**
-  - CreatePodcast → insert with status='generating' → call n8n webhook at `https://maxipad.app.n8n.cloud/webhook/generate-interactive-podcast`
+  - CreatePodcast → insert with status='generating' → fire webhook call to `https://maxipad.app.n8n.cloud/webhook/generate-interactive-podcast` → immediately navigate to PodcastPlayer
   - Webhook generates conversational guide/script using LLM
-  - PodcastPlayer polls until status='ready'
+  - PodcastPlayer polls every 3 seconds until status='ready'
   - Once ready, automatically redirects to `/study-set/:id/podcasts/:podcastId/interactive`
   - LiveInteractivePodcast component uses ElevenLabs Conversational AI (@elevenlabs/client)
   - Script format: array of `{ speaker: 'sam', text: '...' }` objects
+  - Script is formatted as text and passed to ElevenLabs as the `script` variable
   - Agent ID stored in `VITE_INTERACTIVE_AGENT_ID` env var
-- PodcastPlayer polls for status updates every 3 seconds while status='generating'
+- Webhook calls use "fire and forget" pattern (no await) for instant navigation
 - Script is stored as structured data in the `script` field (JSONB)
 
 ### Database Triggers

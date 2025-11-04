@@ -27,6 +27,9 @@ export default function PodcastPlayer() {
   useEffect(() => {
     if (!podcast || podcast.status !== 'generating') return
 
+    // Use faster polling for interactive podcasts (3s), slower for pre-recorded (10s)
+    const pollIntervalMs = podcast.type === 'live-interactive' ? 3000 : 10000
+
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from('podcasts')
@@ -34,14 +37,14 @@ export default function PodcastPlayer() {
         .eq('id', podcastId)
         .single()
 
-      if (data && data.status !== 'generating') {
+      if (data && data.status === 'ready') {
         setPodcast(prev => ({ ...prev, ...data }))
         clearInterval(pollInterval)
       }
-    }, 3000) // Poll every 3 seconds
+    }, pollIntervalMs)
 
     return () => clearInterval(pollInterval)
-  }, [podcast?.status, podcastId])
+  }, [podcast?.status, podcast?.type, podcastId])
 
   async function fetchPodcast() {
     setLoading(true)
