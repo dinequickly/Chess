@@ -16,9 +16,9 @@ export default function PodcastPlayer() {
     fetchPodcast()
   }, [podcastId])
 
-  // Redirect to interactive page for live-interactive podcasts
+  // Redirect to interactive page for live-interactive podcasts once ready
   useEffect(() => {
-    if (podcast && podcast.type === 'live-interactive') {
+    if (podcast && podcast.type === 'live-interactive' && podcast.status === 'ready') {
       navigate(`/study-set/${id}/podcasts/${podcastId}/interactive`)
     }
   }, [podcast, id, podcastId, navigate])
@@ -30,7 +30,7 @@ export default function PodcastPlayer() {
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from('podcasts')
-        .select('status, audio_url')
+        .select('status, audio_url, script')
         .eq('id', podcastId)
         .single()
 
@@ -171,9 +171,15 @@ export default function PodcastPlayer() {
           {podcast.status === 'generating' && (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-              <h2 className="text-xl font-medium mb-2">Generating Podcast...</h2>
+              <h2 className="text-xl font-medium mb-2">
+                {podcast.type === 'live-interactive'
+                  ? 'Preparing Interactive Podcast...'
+                  : 'Generating Podcast...'}
+              </h2>
               <p className="text-gray-600">
-                This may take a few moments. Your podcast is being created based on your preferences.
+                {podcast.type === 'live-interactive'
+                  ? 'Creating a conversational guide for your interactive session. This will take just a moment.'
+                  : 'This may take a few moments. Your podcast is being created based on your preferences.'}
               </p>
               {podcast.user_goal && (
                 <div className="mt-4 p-4 bg-gray-50 rounded max-w-md mx-auto text-left">

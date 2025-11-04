@@ -23,6 +23,73 @@ export default function CreatePodcast() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  async function startInteractiveGeneration(podcast) {
+    try {
+      // Fetch flashcards from the study set
+      const { data: flashcards } = await supabase
+        .from('flashcards')
+        .select('question, answer')
+        .eq('study_set_id', id)
+        .is('deleted_at', null)
+
+      // Call n8n webhook to generate interactive script
+      const response = await fetch('https://maxipad.app.n8n.cloud/webhook/generate-interactive-podcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          podcast_id: podcast.id,
+          title: podcast.title,
+          user_goal: podcast.user_goal,
+          duration_minutes: podcast.duration_minutes,
+          flashcards: flashcards || []
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to start interactive podcast generation')
+      }
+
+      console.log('Interactive podcast generation started')
+    } catch (err) {
+      console.error('Interactive generation error:', err)
+      throw err
+    }
+  }
+
+  async function startPreRecordedGeneration(podcast) {
+    try {
+      // Fetch flashcards from the study set
+      const { data: flashcards } = await supabase
+        .from('flashcards')
+        .select('question, answer')
+        .eq('study_set_id', id)
+        .is('deleted_at', null)
+
+      // Call API route which forwards to n8n
+      const response = await fetch('/api/generate-podcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          podcastId: podcast.id,
+          title: podcast.title,
+          type: podcast.type,
+          durationMinutes: podcast.duration_minutes,
+          userGoal: podcast.user_goal,
+          flashcards: flashcards || []
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to start pre-recorded podcast generation')
+      }
+
+      console.log('Pre-recorded podcast generation started')
+    } catch (err) {
+      console.error('Pre-recorded generation error:', err)
+      throw err
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
 
@@ -35,26 +102,7 @@ export default function CreatePodcast() {
     setError('')
 
     try {
-      // Create podcast record
-      // For live-interactive, we need to fetch flashcards first to generate the script
-      let script = null
-      if (formData.type === 'live-interactive') {
-        const { data: flashcards } = await supabase
-          .from('flashcards')
-          .select('question, answer')
-          .eq('study_set_id', id)
-          .is('deleted_at', null)
-          .limit(10)
-
-        // Generate a simple script from flashcards
-        if (flashcards && flashcards.length > 0) {
-          script = flashcards.map((card, index) => ({
-            speaker: index % 2 === 0 ? 'Host' : 'Expert',
-            text: `${card.question} ${card.answer}`
-          }))
-        }
-      }
-
+      // Create podcast record with status 'generating'
       const { data: podcast, error: insertErr } = await supabase
         .from('podcasts')
         .insert({
@@ -64,20 +112,24 @@ export default function CreatePodcast() {
           type: formData.type,
           duration_minutes: formData.durationMinutes,
           user_goal: formData.userGoal.trim() || null,
-          status: formData.type === 'live-interactive' ? 'ready' : 'generating',
-          script: script
+          status: 'generating'
         })
         .select()
         .single()
 
       if (insertErr) throw insertErr
 
-      // Navigate based on podcast type
+      // Start generation based on podcast type
       if (formData.type === 'live-interactive') {
-        navigate(`/study-set/${id}/podcasts/${podcast.id}/interactive`)
+        // Call n8n webhook to generate interactive script
+        await startInteractiveGeneration(podcast)
       } else {
-        navigate(`/study-set/${id}/podcasts/${podcast.id}`)
+        // Call the pre-recorded podcast generation endpoint
+        await startPreRecordedGeneration(podcast)
       }
+
+      // Navigate to the player page (where polling will happen)
+      navigate(`/study-set/${id}/podcasts/${podcast.id}`)
     } catch (err) {
       console.error('Create podcast error', err)
       setError(err.message || 'Failed to create podcast')

@@ -60,12 +60,14 @@ supabase db lint                                  # Check for invalid references
 - `/study-set/:id/podcasts` - Podcasts list for a study set
 - `/study-set/:id/podcasts/create` - Create new podcast
 - `/study-set/:id/podcasts/:podcastId` - Podcast player
+- `/study-set/:setId/podcasts/:podcastId/interactive` - Live interactive podcast with ElevenLabs
 
 ### Components
 - `ProtectedRoute` - Wraps authenticated routes, redirects to `/login`
 - `NavBar` - Top navigation with user menu
 - `AIChatPanel` - Right sidebar for AI flashcard generation (mode: 'flashcard')
 - `StudyGuideAIPanel` - Right sidebar for AI study guide generation (mode: 'study_guide')
+- `LiveInteractivePodcast` - Real-time conversational podcast using ElevenLabs Conversational AI
 
 ### Backend Architecture
 The app uses **serverless functions** deployed on Netlify OR Vercel (not both) to handle AI requests:
@@ -143,8 +145,9 @@ The app uses **serverless functions** deployed on Netlify OR Vercel (not both) t
 
 ### Frontend (Vite)
 ```bash
-VITE_SUPABASE_URL=          # Supabase project URL
-VITE_SUPABASE_ANON_KEY=     # Supabase anon/public key
+VITE_SUPABASE_URL=              # Supabase project URL
+VITE_SUPABASE_ANON_KEY=         # Supabase anon/public key
+VITE_INTERACTIVE_AGENT_ID=      # ElevenLabs agent ID for interactive podcasts
 ```
 
 ### Backend (Serverless Functions)
@@ -180,10 +183,19 @@ Store frontend vars in `.env.local` at project root. For serverless, use platfor
 
 ### Podcasts
 - Users create podcasts linked to study sets
-- Podcast creation flow: CreatePodcast → insert into `podcasts` table with status='generating' → navigate to PodcastPlayer
+- **Pre-recorded podcasts:**
+  - CreatePodcast → insert with status='generating' → call `/api/generate-podcast` → navigate to PodcastPlayer
+  - PodcastPlayer polls until status='ready' and audio_url is available
+- **Live-interactive podcasts:**
+  - CreatePodcast → insert with status='generating' → call n8n webhook at `https://maxipad.app.n8n.cloud/webhook/generate-interactive-podcast`
+  - Webhook generates conversational guide/script using LLM
+  - PodcastPlayer polls until status='ready'
+  - Once ready, automatically redirects to `/study-set/:id/podcasts/:podcastId/interactive`
+  - LiveInteractivePodcast component uses ElevenLabs Conversational AI (@elevenlabs/client)
+  - Script format: array of `{ speaker: 'sam', text: '...' }` objects
+  - Agent ID stored in `VITE_INTERACTIVE_AGENT_ID` env var
 - PodcastPlayer polls for status updates every 3 seconds while status='generating'
-- Podcasts support different types (pre-recorded, live-interactive, etc.)
-- Script is stored as structured data in the `script` field
+- Script is stored as structured data in the `script` field (JSONB)
 
 ### Database Triggers
 - `update_study_set_card_count()` - Maintains `total_cards` count when flashcards inserted/deleted
