@@ -196,16 +196,35 @@ export default function TakePracticeTest() {
     )
   }
 
+  // Check if test is ready (completed or ready status)
+  const isTestReady = practiceTest.status === 'completed' || practiceTest.status === 'ready'
+  if (!isTestReady) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-sm border p-8 max-w-md text-center">
+          <h2 className="text-xl font-semibold mb-2">Test Not Ready</h2>
+          <p className="text-gray-600 mb-4">This test has an unexpected status: {practiceTest.status}</p>
+          <button
+            onClick={() => navigate(`/study-set/${id}/practice-tests`)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+          >
+            Back to Practice Tests
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const questions = practiceTest.content?.questions || []
   const metadata = practiceTest.metadata || {}
 
   // Test not started - show overview
   if (!testStarted) {
     const breakdown = {
-      multiple_choice: questions.filter(q => q.type === 'multiple_choice').length,
-      true_false: questions.filter(q => q.type === 'true_false').length,
-      short_answer: questions.filter(q => q.type === 'short_answer').length,
-      essay: questions.filter(q => q.type === 'essay').length
+      multiple_choice: questions.filter(q => q.question_type === 'multiple_choice').length,
+      true_false: questions.filter(q => q.question_type === 'true_false').length,
+      short_answer: questions.filter(q => q.question_type === 'short_answer').length,
+      essay: questions.filter(q => q.question_type === 'essay').length
     }
 
     const totalPoints = questions.reduce((sum, q) => sum + (q.points || 0), 0)
@@ -298,18 +317,18 @@ export default function TakePracticeTest() {
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
               <div className="text-sm text-gray-500 mb-1">
-                {currentQuestion.type === 'multiple_choice' && '📝 Multiple Choice'}
-                {currentQuestion.type === 'true_false' && '✓ True/False'}
-                {currentQuestion.type === 'short_answer' && '✍️ Short Answer'}
-                {currentQuestion.type === 'essay' && '📄 Essay'}
+                {currentQuestion.question_type === 'multiple_choice' && '📝 Multiple Choice'}
+                {currentQuestion.question_type === 'true_false' && '✓ True/False'}
+                {currentQuestion.question_type === 'short_answer' && '✍️ Short Answer'}
+                {currentQuestion.question_type === 'essay' && '📄 Essay'}
               </div>
-              <div className="text-lg font-medium mb-2">{currentQuestion.question}</div>
+              <div className="text-lg font-medium mb-2">{currentQuestion.question_text}</div>
               <div className="text-sm text-gray-500">({currentQuestion.points || 5} points)</div>
             </div>
           </div>
 
           {/* Answer Options */}
-          {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false') && (
+          {(currentQuestion.question_type === 'multiple_choice' || currentQuestion.question_type === 'true_false') && (
             <div className="space-y-2">
               {currentQuestion.options?.map((option, idx) => (
                 <label
@@ -331,7 +350,7 @@ export default function TakePracticeTest() {
             </div>
           )}
 
-          {currentQuestion.type === 'short_answer' && (
+          {currentQuestion.question_type === 'short_answer' && (
             <textarea
               value={answers[currentQuestionIndex] || ''}
               onChange={(e) => handleAnswer(e.target.value)}
@@ -341,7 +360,7 @@ export default function TakePracticeTest() {
             />
           )}
 
-          {currentQuestion.type === 'essay' && (
+          {currentQuestion.question_type === 'essay' && (
             <textarea
               value={answers[currentQuestionIndex] || ''}
               onChange={(e) => handleAnswer(e.target.value)}

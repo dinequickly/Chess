@@ -60,7 +60,7 @@ export default function PracticeTestResults() {
       maxScore += points
 
       if (userAnswer && correctAnswer) {
-        if (question.type === 'multiple_choice' || question.type === 'true_false') {
+        if (question.question_type === 'multiple_choice' || question.question_type === 'true_false') {
           if (userAnswer === correctAnswer) {
             totalScore += points
           }
@@ -104,7 +104,7 @@ export default function PracticeTestResults() {
     const performance = {}
 
     questions.forEach((question, idx) => {
-      const type = question.type
+      const type = question.question_type
       if (!performance[type]) {
         performance[type] = { correct: 0, total: 0 }
       }
@@ -254,12 +254,12 @@ export default function PracticeTestResults() {
                         </span>
                       )}
                     </div>
-                    <div className="text-lg font-medium mb-2">{question.question}</div>
+                    <div className="text-lg font-medium mb-2">{question.question_text}</div>
                   </div>
                 </div>
 
                 {/* Show answer options for MC/TF */}
-                {(question.type === 'multiple_choice' || question.type === 'true_false') && (
+                {(question.question_type === 'multiple_choice' || question.question_type === 'true_false') && (
                   <div className="space-y-2 mb-4">
                     {question.options?.map((option, optIdx) => {
                       const isUserAnswer = userAnswer === option
@@ -290,7 +290,7 @@ export default function PracticeTestResults() {
                 )}
 
                 {/* Show text answers for SA/Essay */}
-                {(question.type === 'short_answer' || question.type === 'essay') && (
+                {(question.question_type === 'short_answer' || question.question_type === 'essay') && (
                   <div className="mb-4">
                     <div className="text-sm font-medium mb-2">Your Answer:</div>
                     <div className="p-3 bg-gray-50 border rounded whitespace-pre-wrap">

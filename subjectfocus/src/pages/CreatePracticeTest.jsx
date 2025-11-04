@@ -128,38 +128,40 @@ export default function CreatePracticeTest() {
     try {
       // Create practice test record in database
 const { data: practiceTest, error: insertError } = await supabase
-  .from('practice_tests')  // <- Changed from generated_content
+  .from('generated_content')
   .insert({
     user_id: user.id,
     study_set_id: id,
+    content_type: 'practice_test',
     title: testTitle,
     status: 'generating',
-    
-    // Map form data to schema columns
-    source_type: sourceType,
-    generation_config: {  // Store all settings in JSONB
+
+    // Store test configuration in metadata
+    metadata: {
+      source_type: sourceType,
       source_guide_id: selectedGuide || null,
-      custom_topic: customTopic || null
+      custom_topic: customTopic || null,
+      total_questions: totalQuestions,
+      distribution: {
+        multiple_choice: distribution.multiple_choice,
+        true_false: distribution.true_false,
+        short_answer: distribution.short_answer,
+        essay: distribution.essay
+      },
+      progressive_difficulty: progressiveDifficulty,
+      include_misconceptions: includeMisconceptions,
+      detailed_explanations: detailedExplanations,
+      mix_recall_application: mixRecallApplication,
+      time_limit_enabled: timeLimitEnabled,
+      time_limit_minutes: timeLimitEnabled ? timeLimitMinutes : null,
+      shuffle_questions: shuffleQuestions,
+      show_results: showResults
     },
-    total_questions: totalQuestions,
-    total_points: totalQuestions * 5, // Estimate 5 points per question
-    
-    // Distribution
-    multiple_choice_percent: distribution.multipleChoice,
-    true_false_percent: distribution.trueFalse,
-    short_answer_percent: distribution.shortAnswer,
-    essay_percent: distribution.essay,
-    
-    // AI Options
-    progressive_difficulty: progressiveDifficulty,
-    include_misconceptions: includeMisconceptions,
-    detailed_explanations: detailedExplanations,
-    mix_recall_application: mixRecallApplication,
-    
-    // Test Settings
-    time_limit_minutes: timeLimitEnabled ? timeLimitMinutes : null,
-    shuffle_questions: shuffleQuestions,
-    show_results: showResults
+
+    // Questions will be populated by webhook in content.questions
+    content: {
+      questions: []
+    }
   })
   .select()
   .single()

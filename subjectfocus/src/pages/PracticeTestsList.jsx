@@ -18,9 +18,10 @@ export default function PracticeTestsList() {
   async function fetchPracticeTests() {
     setLoading(true)
     const { data, error: fetchErr } = await supabase
-      .from('practice_tests')
+      .from('generated_content')
       .select('*')
       .eq('study_set_id', id)
+      .eq('content_type', 'practice_test')
       .order('created_at', { ascending: false })
 
     if (fetchErr) {
@@ -35,7 +36,7 @@ export default function PracticeTestsList() {
     if (!confirm(`Delete "${testTitle}"?\n\nThis will delete the test and all attempt history.`)) return
 
     const { error: deleteErr } = await supabase
-      .from('practice_tests')
+      .from('generated_content')
       .delete()
       .eq('id', testId)
 
@@ -50,13 +51,19 @@ export default function PracticeTestsList() {
     const styles = {
       generating: 'bg-yellow-100 text-yellow-800',
       completed: 'bg-green-100 text-green-800',
+      ready: 'bg-green-100 text-green-800',
       failed: 'bg-red-100 text-red-800'
     }
+    const label = status === 'ready' ? 'Ready' : status.charAt(0).toUpperCase() + status.slice(1)
     return (
       <span className={`px-2 py-1 rounded text-xs font-medium ${styles[status] || ''}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+        {label}
       </span>
     )
+  }
+
+  function isTestReady(test) {
+    return test.status === 'completed' || test.status === 'ready'
   }
 
   function getSourceLabel(sourceType) {
@@ -66,6 +73,15 @@ export default function PracticeTestsList() {
       custom_topic: 'Custom Topic'
     }
     return labels[sourceType] || sourceType
+  }
+
+  function getTotalQuestions(test) {
+    return test.content?.questions?.length || test.metadata?.total_questions || 0
+  }
+
+  function getTotalPoints(test) {
+    const questions = test.content?.questions || []
+    return questions.reduce((sum, q) => sum + (q.points || 0), 0) || (getTotalQuestions(test) * 5)
   }
 
   if (loading) return <div className="p-6">Loading practice tests...</div>
@@ -123,14 +139,14 @@ export default function PracticeTestsList() {
                     </div>
                     <div className="text-sm text-gray-600 space-y-1">
                       <div className="flex items-center gap-4">
-                        <span>📝 {test.total_questions} questions</span>
-                        <span>📊 {test.total_points} points</span>
-                        {test.time_limit_minutes && (
-                          <span>⏱️ {test.time_limit_minutes} min</span>
+                        <span>📝 {getTotalQuestions(test)} questions</span>
+                        <span>📊 {getTotalPoints(test)} points</span>
+                        {test.metadata?.time_limit_minutes && (
+                          <span>⏱️ {test.metadata.time_limit_minutes} min</span>
                         )}
                       </div>
                       <div>
-                        <span className="font-medium">Source:</span> {getSourceLabel(test.source_type)}
+                        <span className="font-medium">Source:</span> {getSourceLabel(test.metadata?.source_type)}
                       </div>
                       <div className="text-xs text-gray-400 mt-2">
                         Created {new Date(test.created_at).toLocaleDateString()} at{' '}
@@ -139,26 +155,26 @@ export default function PracticeTestsList() {
                     </div>
 
                     {/* Question Distribution */}
-                    {test.status === 'completed' && (
+                    {isTestReady(test) && test.metadata?.distribution && (
                       <div className="mt-3 flex gap-2 text-xs">
-                        {test.multiple_choice_percent > 0 && (
+                        {test.metadata.distribution.multiple_choice > 0 && (
                           <span className="px-2 py-1 bg-gray-100 rounded">
-                            {test.multiple_choice_percent}% MC
+                            {test.metadata.distribution.multiple_choice}% MC
                           </span>
                         )}
-                        {test.true_false_percent > 0 && (
+                        {test.metadata.distribution.true_false > 0 && (
                           <span className="px-2 py-1 bg-gray-100 rounded">
-                            {test.true_false_percent}% T/F
+                            {test.metadata.distribution.true_false}% T/F
                           </span>
                         )}
-                        {test.short_answer_percent > 0 && (
+                        {test.metadata.distribution.short_answer > 0 && (
                           <span className="px-2 py-1 bg-gray-100 rounded">
-                            {test.short_answer_percent}% SA
+                            {test.metadata.distribution.short_answer}% SA
                           </span>
                         )}
-                        {test.essay_percent > 0 && (
+                        {test.metadata.distribution.essay > 0 && (
                           <span className="px-2 py-1 bg-gray-100 rounded">
-                            {test.essay_percent}% Essay
+                            {test.metadata.distribution.essay}% Essay
                           </span>
                         )}
                       </div>
@@ -169,7 +185,7 @@ export default function PracticeTestsList() {
                   </div>
 
                   <div className="flex flex-col gap-2 ml-4">
-                    {test.status === 'completed' && (
+                    {isTestReady(test) && (
                       <button
                         onClick={() => navigate(`/study-set/${id}/practice-test/${test.id}`)}
                         className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 whitespace-nowrap"
