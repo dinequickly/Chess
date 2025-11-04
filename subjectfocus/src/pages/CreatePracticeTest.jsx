@@ -136,8 +136,8 @@ const { data: practiceTest, error: insertError } = await supabase
     title: testTitle,
     status: 'generating',
 
-    // Store test configuration in metadata
-    metadata: {
+    // Store test configuration and questions in content_metadata
+    content_metadata: {
       source_type: sourceType,
       source_guide_id: selectedGuide || null,
       custom_topic: customTopic || null,
@@ -155,12 +155,8 @@ const { data: practiceTest, error: insertError } = await supabase
       time_limit_enabled: timeLimitEnabled,
       time_limit_minutes: timeLimitEnabled ? timeLimitMinutes : null,
       shuffle_questions: shuffleQuestions,
-      show_results: showResults
-    },
-
-    // Questions will be populated by webhook in content.questions
-    content: {
-      questions: []
+      show_results: showResults,
+      questions: []  // Will be populated by webhook
     }
   })
   .select()

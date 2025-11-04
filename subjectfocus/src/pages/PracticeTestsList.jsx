@@ -76,11 +76,11 @@ export default function PracticeTestsList() {
   }
 
   function getTotalQuestions(test) {
-    return test.content?.questions?.length || test.metadata?.total_questions || 0
+    return test.content_metadata?.questions?.length || test.content_metadata?.total_questions || 0
   }
 
   function getTotalPoints(test) {
-    const questions = test.content?.questions || []
+    const questions = test.content_metadata?.questions || []
     return questions.reduce((sum, q) => sum + (q.points || 0), 0) || (getTotalQuestions(test) * 5)
   }
 
@@ -141,12 +141,12 @@ export default function PracticeTestsList() {
                       <div className="flex items-center gap-4">
                         <span>📝 {getTotalQuestions(test)} questions</span>
                         <span>📊 {getTotalPoints(test)} points</span>
-                        {test.metadata?.time_limit_minutes && (
-                          <span>⏱️ {test.metadata.time_limit_minutes} min</span>
+                        {test.content_metadata?.time_limit_minutes && (
+                          <span>⏱️ {test.content_metadata.time_limit_minutes} min</span>
                         )}
                       </div>
                       <div>
-                        <span className="font-medium">Source:</span> {getSourceLabel(test.metadata?.source_type)}
+                        <span className="font-medium">Source:</span> {getSourceLabel(test.content_metadata?.source_type)}
                       </div>
                       <div className="text-xs text-gray-400 mt-2">
                         Created {new Date(test.created_at).toLocaleDateString()} at{' '}
@@ -155,26 +155,26 @@ export default function PracticeTestsList() {
                     </div>
 
                     {/* Question Distribution */}
-                    {isTestReady(test) && test.metadata?.distribution && (
+                    {isTestReady(test) && test.content_metadata?.distribution && (
                       <div className="mt-3 flex gap-2 text-xs">
-                        {test.metadata.distribution.multiple_choice > 0 && (
+                        {test.content_metadata.distribution.multiple_choice > 0 && (
                           <span className="px-2 py-1 bg-gray-100 rounded">
-                            {test.metadata.distribution.multiple_choice}% MC
+                            {test.content_metadata.distribution.multiple_choice}% MC
                           </span>
                         )}
-                        {test.metadata.distribution.true_false > 0 && (
+                        {test.content_metadata.distribution.true_false > 0 && (
                           <span className="px-2 py-1 bg-gray-100 rounded">
-                            {test.metadata.distribution.true_false}% T/F
+                            {test.content_metadata.distribution.true_false}% T/F
                           </span>
                         )}
-                        {test.metadata.distribution.short_answer > 0 && (
+                        {test.content_metadata.distribution.short_answer > 0 && (
                           <span className="px-2 py-1 bg-gray-100 rounded">
-                            {test.metadata.distribution.short_answer}% SA
+                            {test.content_metadata.distribution.short_answer}% SA
                           </span>
                         )}
-                        {test.metadata.distribution.essay > 0 && (
+                        {test.content_metadata.distribution.essay > 0 && (
                           <span className="px-2 py-1 bg-gray-100 rounded">
-                            {test.metadata.distribution.essay}% Essay
+                            {test.content_metadata.distribution.essay}% Essay
                           </span>
                         )}
                       </div>

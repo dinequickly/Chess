@@ -38,8 +38,8 @@ export default function TakePracticeTest() {
 
   useEffect(() => {
     // Start timer when test starts
-    if (testStarted && practiceTest?.metadata?.time_limit_enabled) {
-      const limit = practiceTest.metadata.time_limit_minutes * 60
+    if (testStarted && practiceTest?.content_metadata?.time_limit_enabled) {
+      const limit = practiceTest.content_metadata.time_limit_minutes * 60
       setTimeRemaining(limit)
       setTestStartTime(Date.now())
 
@@ -215,8 +215,8 @@ export default function TakePracticeTest() {
     )
   }
 
-  const questions = practiceTest.content?.questions || []
-  const metadata = practiceTest.metadata || {}
+  const questions = practiceTest.content_metadata?.questions || []
+  const metadata = practiceTest.content_metadata || {}
 
   // Test not started - show overview
   if (!testStarted) {

@@ -48,7 +48,7 @@ export default function PracticeTestResults() {
     }
 
     // Calculate score
-    const questions = testData.content?.questions || []
+    const questions = testData.content_metadata?.questions || []
     let totalScore = 0
     let maxScore = 0
 
@@ -100,7 +100,7 @@ export default function PracticeTestResults() {
   function getPerformanceByType() {
     if (!practiceTest || !attempt) return {}
 
-    const questions = practiceTest.content?.questions || []
+    const questions = practiceTest.content_metadata?.questions || []
     const performance = {}
 
     questions.forEach((question, idx) => {
@@ -131,7 +131,7 @@ export default function PracticeTestResults() {
   }
 
   const percentage = getPercentage()
-  const questions = practiceTest.content?.questions || []
+  const questions = practiceTest.content_metadata?.questions || []
   const performance = getPerformanceByType()
 
   // Results Overview
