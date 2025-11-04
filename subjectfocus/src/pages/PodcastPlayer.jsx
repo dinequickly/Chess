@@ -1,30 +1,43 @@
-// src/pages/PodcastPlayer.jsx
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 
-const GENERATION_WEBHOOK = 'https://maxipad.app.n8n.cloud/webhook/generate-prerecorded-podcast'
-
 export default function PodcastPlayer() {
-  const { id, podcastId } = useParams() // study_set_id (route param "id"), podcast_id
+  const { id, podcastId } = useParams() // study_set_id, podcast_id
   const navigate = useNavigate()
   const { user } = useAuth()
-
   const [podcast, setPodcast] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [genMsg, setGenMsg] = useState('')
-  const genStartedRef = useRef(false)
+  const [generationStarted, setGenerationStarted] = useState(false)
 
   useEffect(() => {
     fetchPodcast()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [podcastId])
+
+  // Poll for status updates when generating
+  useEffect(() => {
+    if (!podcast || podcast.status !== 'generating') return
+
+    const pollInterval = setInterval(async () => {
+      const { data } = await supabase
+        .from('podcasts')
+        .select('status, audio_url')
+        .eq('id', podcastId)
+        .single()
+
+      if (data && data.status !== 'generating') {
+        setPodcast(prev => ({ ...prev, ...data }))
+        clearInterval(pollInterval)
+      }
+    }, 3000) // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [podcast?.status, podcastId])
 
   async function fetchPodcast() {
     setLoading(true)
-    setError('')
     const { data, error: fetchErr } = await supabase
       .from('podcasts')
       .select('*')
@@ -40,75 +53,52 @@ export default function PodcastPlayer() {
     setPodcast(data)
     setLoading(false)
 
-    if (data.status === 'generating') {
-      await maybeTriggerGeneration(data)
+    // Trigger generation if status is 'generating' and we haven't started yet
+    if (data.status === 'generating' && !generationStarted) {
+      setGenerationStarted(true)
+      startGeneration(data)
     }
   }
 
-  async function maybeTriggerGeneration(current) {
-    if (genStartedRef.current) return
-    genStartedRef.current = true
-
+  async function startGeneration(podcastData) {
     try {
-      setGenMsg('contacting generator')
+      console.log('Starting podcast generation...', podcastData)
 
-      // Build payload expected by backend
-      const payload = {
-        podcast_id: current.id || podcastId,
-        user_id: user?.id || current.user_id || null,
-        study_set_id: current.study_set_id || id || null,
-        type: current.type,
-        title: current.title,
-        duration_minutes: current.duration_minutes,
-        user_goal: current.user_goal || '',
-        reference_set: !!current.reference_set
-      }
+      // Fetch flashcards from the study set
+      const { data: flashcards } = await supabase
+        .from('flashcards')
+        .select('question, answer')
+        .eq('study_set_id', id)
+        .is('deleted_at', null)
 
-      // Kick off generation
-      const resp = await fetch(GENERATION_WEBHOOK, {
+      // Call our API route which forwards to n8n
+      const response = await fetch('/api/generate-podcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          podcastId: podcastData.id,
+          title: podcastData.title,
+          type: podcastData.type,
+          durationMinutes: podcastData.duration_minutes,
+          userGoal: podcastData.user_goal,
+          flashcards: flashcards || []
+        })
       })
 
-      // Handle non-200
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => '')
-        throw new Error(`generation request failed: ${resp.status} ${text}`)
+      if (!response.ok) {
+        throw new Error('Failed to start generation')
       }
 
-      // Expect JSON with at least { status } and maybe { audio_url }
-      const body = await resp.json().catch(() => ({}))
-      const nextStatus = body.status || 'ready'
-      const audioUrl = body.audio_url || body.audio || null
+      console.log('Generation started successfully')
+    } catch (err) {
+      console.error('Generation error:', err)
+      // Update status to failed
+      await supabase
+        .from('podcasts')
+        .update({ status: 'failed' })
+        .eq('id', podcastId)
 
-      // If ready and audio_url present, persist
-      if (nextStatus === 'ready' && audioUrl) {
-        setGenMsg('saving audio url')
-        const { error: upErr } = await supabase
-          .from('podcasts')
-          .update({ status: 'ready', audio_url: audioUrl })
-          .eq('id', podcastId)
-
-        if (upErr) throw upErr
-
-        // Refresh local state
-        setPodcast((p) => (p ? { ...p, status: 'ready', audio_url: audioUrl, updated_at: new Date().toISOString() } : p))
-        setGenMsg('ready')
-        return
-      }
-
-      // If still generating, leave status as is. Optional polling hook:
-      setGenMsg(typeof body.message === 'string' ? body.message : 'generation in progress')
-      // You can add polling here if your webhook returns a job id.
-    } catch (e) {
-      console.error(e)
-      setError(e.message || 'generation failed')
-      setGenMsg('marking failed')
-
-      // Mark failed
-      await supabase.from('podcasts').update({ status: 'failed' }).eq('id', podcastId)
-      setPodcast((p) => (p ? { ...p, status: 'failed', updated_at: new Date().toISOString() } : p))
+      setPodcast(prev => ({ ...prev, status: 'failed' }))
     }
   }
 
@@ -176,9 +166,8 @@ export default function PodcastPlayer() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
               <h2 className="text-xl font-medium mb-2">Generating Podcast...</h2>
               <p className="text-gray-600">
-                Your podcast is being created based on your preferences.
+                This may take a few moments. Your podcast is being created based on your preferences.
               </p>
-              {genMsg && <div className="mt-2 text-xs text-gray-500">Status: {genMsg}</div>}
               {podcast.user_goal && (
                 <div className="mt-4 p-4 bg-gray-50 rounded max-w-md mx-auto text-left">
                   <div className="text-sm font-medium text-gray-700 mb-1">Your Goal:</div>
@@ -192,12 +181,16 @@ export default function PodcastPlayer() {
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-xl font-medium mb-2">Ready to Listen</h2>
-                <p className="text-gray-600">Your podcast is ready.</p>
+                <p className="text-gray-600">Your podcast is ready!</p>
               </div>
 
               {/* Audio Player */}
               <div className="bg-gray-50 rounded-lg p-6">
-                <audio controls className="w-full" src={podcast.audio_url}>
+                <audio
+                  controls
+                  className="w-full"
+                  src={podcast.audio_url}
+                >
                   Your browser does not support audio playback.
                 </audio>
               </div>
