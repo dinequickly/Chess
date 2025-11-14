@@ -58,6 +58,7 @@ async function getCourseStructure(studySetId, userId) {
         `
         id,
         course_name,
+        course_context,
         canvas_modules (
           id,
           module_name,
@@ -115,6 +116,7 @@ async function getCourseStructure(studySetId, userId) {
     const courseStructure = {
       course_id: course.id,
       course_name: course.course_name,
+      course_context: course.course_context,
       modules,
       all_item_names: Array.from(allItemNames)
     }
@@ -366,6 +368,7 @@ export default async function handler(req, res) {
       course_context: {
         course_id: courseStructure.course_id,
         course_name: courseStructure.course_name,
+        course_context: courseStructure.course_context,
         modules_searched: courseStructure.modules.length,
         total_items: courseStructure.all_item_names.length
       }

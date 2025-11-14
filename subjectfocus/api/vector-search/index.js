@@ -71,7 +71,25 @@ export default async function handler(req, res) {
 
     console.log('Linked Canvas courses:', studySet.linked_canvas_courses)
 
-    // Step 2: Generate embedding for the query using OpenAI
+    // Step 2: Fetch course context from linked Canvas courses
+    const { data: courses, error: courseError } = await supabase
+      .from('canvas_courses')
+      .select('id, course_name, course_context')
+      .in('id', studySet.linked_canvas_courses)
+      .eq('user_id', user_id)
+      .is('deleted_at', null)
+
+    let courseContextData = null
+    if (courses && courses.length > 0) {
+      courseContextData = {
+        course_id: courses[0].id,
+        course_name: courses[0].course_name,
+        course_context: courses[0].course_context
+      }
+      console.log('Course context loaded:', courseContextData.course_name)
+    }
+
+    // Step 3: Generate embedding for the query using OpenAI
     console.log('Generating embedding for query...')
     const embeddingResponse = await openai.embeddings.create({
       model: 'text-embedding-3-small',
@@ -85,7 +103,7 @@ export default async function handler(req, res) {
     const queryEmbedding = embeddingResponse.data[0].embedding
     console.log('Embedding generated, dimensions:', queryEmbedding.length)
 
-    // Step 3: Call the search_canvas_vectors RPC function
+    // Step 4: Call the search_canvas_vectors RPC function
     console.log('Searching vectors with threshold:', match_threshold, 'limit:', match_count)
     const { data: results, error: searchError } = await supabase.rpc(
       'search_canvas_vectors',
@@ -105,7 +123,10 @@ export default async function handler(req, res) {
 
     console.log(`Found ${results?.length || 0} matching vectors`)
 
-    res.status(200).json({ results: results || [] })
+    res.status(200).json({
+      results: results || [],
+      course_context: courseContextData
+    })
 
   } catch (error) {
     console.error('Vector search handler error:', error)

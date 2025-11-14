@@ -76,12 +76,13 @@ function truncate(str, max) {
  * Fetch Canvas content via intelligent search for RAG
  * Returns relevant chunks from linked Canvas courses using AI-analyzed query strategy
  * Falls back to basic vector search if intelligent search fails
+ * Returns: { results: Array, courseContext: Object }
  */
 async function getCanvasContext(query, studySetId, userId) {
   try {
     if (!studySetId || !userId) {
       console.log('Skipping canvas context: missing studySetId or userId')
-      return []
+      return { results: [], courseContext: null }
     }
 
     console.log('Fetching canvas context for query:', query)
@@ -104,7 +105,7 @@ async function getCanvasContext(query, studySetId, userId) {
       return await getCanvasContextFallback(query, studySetId, userId)
     }
 
-    const { results, search_strategy } = await response.json()
+    const { results, search_strategy, course_context } = await response.json()
     console.log('Canvas context results:', results?.length || 0)
     console.log('Search strategy used:', {
       strategy: search_strategy?.strategy_used,
@@ -112,7 +113,10 @@ async function getCanvasContext(query, studySetId, userId) {
       filters: search_strategy?.filters_applied,
       scope: search_strategy?.search_scope
     })
-    return results || []
+    return {
+      results: results || [],
+      courseContext: course_context
+    }
   } catch (error) {
     console.error('Failed to fetch canvas context:', error?.message || error)
     console.log('Falling back to basic vector search...')
@@ -123,6 +127,7 @@ async function getCanvasContext(query, studySetId, userId) {
 /**
  * Fallback to basic vector search if intelligent search fails
  * This ensures RAG still works even if the advanced system has issues
+ * Returns: { results: Array, courseContext: Object }
  */
 async function getCanvasContextFallback(query, studySetId, userId) {
   try {
@@ -143,27 +148,37 @@ async function getCanvasContextFallback(query, studySetId, userId) {
 
     if (!response.ok) {
       console.error('Fallback vector search also failed:', response.status)
-      return []
+      return { results: [], courseContext: null }
     }
 
-    const { results } = await response.json()
+    const { results, course_context } = await response.json()
     console.log('Fallback search returned:', results?.length || 0, 'results')
-    return results || []
+    return {
+      results: results || [],
+      courseContext: course_context
+    }
   } catch (error) {
     console.error('Fallback vector search error:', error?.message || error)
-    return []
+    return { results: [], courseContext: null }
   }
 }
 
-function formatContext(context = {}, canvasChunks = []) {
+function formatContext(context = {}, canvasChunks = [], courseContext = null) {
   const MAX_CTX = 15000 // chars to keep for currentContent
   const parts = []
   const isStudyGuide = context.mode === 'study_guide'
 
   if (context.study_set_id) parts.push(`Study set ID: ${context.study_set_id}`)
+  if (context.flashcard_set_id) parts.push(`Flashcard set ID: ${context.flashcard_set_id}`)
+  if (context.set_title) parts.push(`Flashcard set: ${truncate(String(context.set_title), 300)}`)
   if (context.title) parts.push(`Title: ${truncate(String(context.title), 300)}`)
   if (context.subject) parts.push(`Subject area: ${truncate(String(context.subject), 300)}`)
   if (context.description) parts.push(`Description: ${truncate(String(context.description), 1000)}`)
+
+  // Add course context if available
+  if (courseContext?.course_context) {
+    parts.push(`\nCourse Context (${courseContext.course_name || 'Canvas Course'}):\n${truncate(String(courseContext.course_context), 2000)}`)
+  }
 
   if (isStudyGuide) {
     if (context.currentContent) {
@@ -219,15 +234,19 @@ export async function runAssistantChat({
 
   // Fetch Canvas content for RAG (for both flashcard and study guide modes)
   let canvasChunks = []
+  let courseContext = null
   if (messages && messages.length > 0 && context.study_set_id && user_id) {
     // Get the user's latest message as the query
     const lastUserMessage = messages[messages.length - 1]?.content
     if (lastUserMessage) {
-      canvasChunks = await getCanvasContext(lastUserMessage, context.study_set_id, user_id)
+      const canvasData = await getCanvasContext(lastUserMessage, context.study_set_id, user_id)
+      canvasChunks = canvasData.results
+      courseContext = canvasData.courseContext
+      console.log('Course context loaded:', courseContext?.course_name || 'None')
     }
   }
 
-  const systemMessage = systemPrompt + formatContext(context, canvasChunks)
+  const systemMessage = systemPrompt + formatContext(context, canvasChunks, courseContext)
 
   // Define response schema based on mode
   const responseSchema = isStudyGuide
@@ -359,20 +378,31 @@ export async function runAssistantChat({
   const executed = []
   const cards = Array.isArray(result.flashcards) ? result.flashcards : []
   if (supabaseService && cards.length > 0) {
-    const targetId = context.study_set_id
+    const studySetId = context.study_set_id
+    const flashcardSetId = context.flashcard_set_id
+
     for (const card of cards) {
-      if (!targetId) {
-        executed.push({ ...card, error: 'Missing study_set_id' })
+      // Require flashcard_set_id (NOT NULL constraint in DB)
+      if (!flashcardSetId) {
+        executed.push({ ...card, error: 'Missing flashcard_set_id' })
         continue
       }
+
       try {
+        const insertPayload = {
+          flashcard_set_id: flashcardSetId,
+          question: card.term,
+          answer: card.definition
+        }
+
+        // Include study_set_id if provided (may be required by DB schema)
+        if (studySetId) {
+          insertPayload.study_set_id = studySetId
+        }
+
         const { data: inserted, error } = await supabaseService
           .from('flashcards')
-          .insert({
-            study_set_id: targetId,
-            question: card.term,
-            answer: card.definition
-          })
+          .insert(insertPayload)
           .select('id, question, answer')
           .single()
 
@@ -381,11 +411,12 @@ export async function runAssistantChat({
           id: inserted.id,
           term: card.term,
           definition: card.definition,
-          study_set_id: targetId
+          flashcard_set_id: flashcardSetId,
+          study_set_id: studySetId
         })
       } catch (err) {
         console.error('Failed to persist flashcard', err)
-        executed.push({ ...card, study_set_id: targetId, error: String(err?.message || err) })
+        executed.push({ ...card, flashcard_set_id: flashcardSetId, error: String(err?.message || err) })
       }
     }
   } else {
