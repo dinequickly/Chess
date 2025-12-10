@@ -239,12 +239,14 @@ export default function Board({
       clickedSquaresAtom,
       playableSquaresAtom,
       showPlayerMoveIconAtom,
+      boardSize: boardSize || 400,
     });
   }, [
     currentPositionAtom,
     clickedSquaresAtom,
     playableSquaresAtom,
     showPlayerMoveIconAtom,
+    boardSize,
   ]);
 
   const customPieces = useMemo(
@@ -303,7 +305,7 @@ export default function Board({
         rowGap={1.5}
         justifyContent="center"
         alignItems="center"
-        paddingLeft={showEvaluationBar ? 2 : 0}
+        paddingLeft={{ xs: 0.5, sm: showEvaluationBar ? 2 : 0 }}
         size="grow"
       >
         <PlayerHeader
