@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react'
+import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react'
 
 interface CanvasLayerProps {
   width: number
@@ -14,13 +14,15 @@ export interface CanvasLayerRef {
   getMaskDataURL: () => string | null
   clear: () => void
   drawBase64Mask: (base64: string) => void
+  drawBox: (x: number, y: number, w: number, h: number) => void
 }
 
 const CanvasLayer = forwardRef<CanvasLayerRef, CanvasLayerProps>(({ width, height, brushSize, mode, className }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
+  const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null)
   const [mousePos, setMousePos] = useState<{ x: number, y: number } | null>(null)
+  const [startPos, setStartPos] = useState<{ x: number, y: number } | null>(null)
 
   useImperativeHandle(ref, () => ({
     getMaskDataURL: () => {
@@ -28,24 +30,48 @@ const CanvasLayer = forwardRef<CanvasLayerRef, CanvasLayerProps>(({ width, heigh
       return canvasRef.current.toDataURL('image/png')
     },
     clear: () => {
-      const ctx = ctxRef.current
-      const canvas = canvasRef.current
-      if (!ctx || !canvas) return
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      if (!ctx || !canvasRef.current) return
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
     },
     drawBase64Mask: (base64: string) => {
-        const ctx = ctxRef.current
-        const canvas = canvasRef.current
-        if (!ctx || !canvas) return
+        if (!ctx || !canvasRef.current) return
+        console.log('CanvasLayer: drawBase64Mask called with length', base64.length)
         const img = new Image()
         img.onload = () => {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+            console.log('CanvasLayer: Mask image loaded, drawing...')
+            ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height)
         }
-        img.src = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`
+        img.onerror = (e) => {
+            console.error('CanvasLayer: Failed to load mask image', e)
+        }
+        
+        if (base64.startsWith('data:')) {
+            img.src = base64
+        } else if (base64.startsWith('/9j/')) {
+            img.src = `data:image/jpeg;base64,${base64}`
+        } else {
+            img.src = `data:image/png;base64,${base64}`
+        }
+    },
+    drawBox: (x: number, y: number, w: number, h: number) => {
+        if (!ctx) return
+        ctx.save()
+        ctx.strokeStyle = '#00FF00'
+        ctx.lineWidth = 2
+        ctx.strokeRect(x, y, w, h)
+        ctx.restore()
+    },
+    highlightBox: (x: number, y: number, w: number, h: number) => {
+        if (!ctx) return
+        ctx.save()
+        ctx.fillStyle = 'rgba(128, 128, 128, 0.5)' // Grey, 50% opacity
+        ctx.fillRect(x, y, w, h)
+        ctx.restore()
     }
-  }), [])
+  }))
 
   useEffect(() => {
+    console.log(`CanvasLayer resized: ${width}x${height}`)
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -57,14 +83,14 @@ const CanvasLayer = forwardRef<CanvasLayerRef, CanvasLayerProps>(({ width, heigh
     context.strokeStyle = 'rgba(255, 255, 255, 1)'
     context.fillStyle = 'rgba(255, 255, 255, 1)'
     
-    ctxRef.current = context
-  }, [])
+    setCtx(context)
+  }, [width, height])
 
   useEffect(() => {
-    const ctx = ctxRef.current
-    if (!ctx) return
-    ctx.lineWidth = mode === 'lasso' ? 2 : brushSize
-  }, [brushSize, mode])
+    if (ctx) {
+      ctx.lineWidth = mode === 'lasso' ? 2 : brushSize
+    }
+  }, [brushSize, mode, ctx])
 
   const getCoords = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current
@@ -90,7 +116,6 @@ const CanvasLayer = forwardRef<CanvasLayerRef, CanvasLayerProps>(({ width, heigh
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     setIsDrawing(true)
     
-    const ctx = ctxRef.current
     if (!ctx) return
     const { x, y } = getCoords(e)
     
@@ -101,25 +126,27 @@ const CanvasLayer = forwardRef<CanvasLayerRef, CanvasLayerProps>(({ width, heigh
         ctx.lineTo(x, y)
         ctx.stroke()
     }
+    else {
+        setStartPos({ x, y })
+    }
   }
 
   const stopDrawing = () => {
     if (!isDrawing) return
     setIsDrawing(false)
     
-    const ctx = ctxRef.current
     if (ctx) {
         if (mode === 'lasso') {
             ctx.closePath()
             ctx.fill() // Fill the lasso shape
             ctx.stroke() // Draw boundary
+            setStartPos(null)
         }
         ctx.beginPath()
     }
   }
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const ctx = ctxRef.current
     if (!isDrawing || !ctx) return
 
     const { x, y } = getCoords(e)
@@ -134,12 +161,12 @@ const CanvasLayer = forwardRef<CanvasLayerRef, CanvasLayerProps>(({ width, heigh
   }
 
   return (
-    <div className={`relative ${className}`} style={{ width, height, touchAction: 'none' }}>
+    <div className={`${className}`} style={{ width, height, touchAction: 'none' }}>
       <canvas
         ref={canvasRef}
         width={width}
         height={height}
-        className={`w-full h-full ${mode === 'lasso' ? 'cursor-crosshair' : 'cursor-none'}`}
+        className={`w-full h-full ${mode === 'brush' ? 'cursor-none' : 'cursor-crosshair'}`}
         onMouseDown={startDrawing}
         onMouseUp={stopDrawing}
         onMouseOut={stopDrawing} 
@@ -150,7 +177,6 @@ const CanvasLayer = forwardRef<CanvasLayerRef, CanvasLayerProps>(({ width, heigh
         onTouchEnd={stopDrawing}
         onTouchMove={draw}
       />
-      {/* Only show brush cursor in brush mode */}
       {mousePos && mode === 'brush' && (
         <div 
           className="pointer-events-none absolute border border-white rounded-full bg-white/20 backdrop-invert"

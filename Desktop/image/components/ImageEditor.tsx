@@ -24,6 +24,7 @@ interface ImageDetails {
   source: ImageSource
   session_id?: string | null
   folder_id?: string | null
+  mask_url?: string | null
 }
 
 export default function ImageEditor({ imageId }: ImageEditorProps) {
@@ -38,10 +39,13 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
   const [toolMode, setToolMode] = useState<'brush' | 'lasso' | 'sam'>('brush')
   const [brushSize, setBrushSize] = useState(20)
   const [prompt, setPrompt] = useState('')
-  const [samPrompt, setSamPrompt] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [generatedImage, setGeneratedImage] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  
+  // SAM State
+  const [samMaskBase64, setSamMaskBase64] = useState<string | null>(null)
+  const [isMaskVisible, setIsMaskVisible] = useState(false)
 
   // Metadata State
   const [name, setName] = useState('')
@@ -59,7 +63,7 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
     setLoading(true)
     const { data: boardData, error: boardError } = await supabase
       .from('mood_board_items')
-      .select('id, image_url, name, description, session_id, folder_id')
+      .select('id, image_url, name, description, session_id, folder_id, mask_url')
       .eq('id', imageId)
       .maybeSingle()
 
@@ -73,16 +77,28 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
         source: 'mood_board_items',
         session_id: boardData.session_id,
         folder_id: boardData.folder_id,
+        mask_url: boardData.mask_url
       })
       setName(boardData.name || '')
       setDescription(boardData.description || '')
+      
+      // If persisted mask exists, we can't easily load it into base64 state without fetching it.
+      // But we can draw it.
+      if (boardData.mask_url) {
+          setTimeout(() => {
+              canvasRef.current?.drawBase64Mask(boardData.mask_url!)
+              // To enable toggle for persisted masks, we would need to fetch the blob here.
+              // For simplicity, we just draw it. The toggle will work only after a NEW generation 
+              // unless we implement fetch-on-load for the mask.
+          }, 500)
+      }
       setLoading(false)
       return
     }
 
     const { data: libraryData, error: libraryError } = await supabase
       .from('folder_items')
-      .select('id, image_url, title, description, folder_id')
+      .select('id, image_url, title, description, folder_id, mask_url')
       .eq('id', imageId)
       .maybeSingle()
 
@@ -96,9 +112,16 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
         description: libraryData.description,
         source: 'folder_items',
         folder_id: libraryData.folder_id,
+        mask_url: libraryData.mask_url
       })
       setName(libraryData.title || '')
       setDescription(libraryData.description || '')
+      
+      if (libraryData.mask_url) {
+          setTimeout(() => {
+              canvasRef.current?.drawBase64Mask(libraryData.mask_url!)
+          }, 500)
+      }
     }
     setLoading(false)
   }
@@ -127,45 +150,132 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
     setSavingMeta(false)
   }
 
-  async function handleSAMSegment() {
-    if (!samPrompt || !image) return
+  async function uploadBase64Image(base64Data: string, pathPrefix: string) {
+    const res = await fetch(base64Data.startsWith('data:') ? base64Data : `data:image/png;base64,${base64Data}`)
+    const blob = await res.blob()
+    const fileExt = 'png' // Masks are usually png
+    const fileName = `${pathPrefix}/${Math.random()}.${fileExt}`
+    
+    const { error: uploadError } = await supabase.storage
+      .from('uploads')
+      .upload(fileName, blob)
+
+    if (uploadError) throw uploadError
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('uploads')
+      .getPublicUrl(fileName)
+      
+    return publicUrl
+  }
+
+  async function saveMaskToDB(base64Mask: string) {
+      if (!image) return
+      try {
+          const pathPrefix = (image.session_id || sessionId || 'uploads') + '/masks'
+          const publicUrl = await uploadBase64Image(base64Mask, pathPrefix)
+          
+          const table = image.source === 'folder_items' ? 'folder_items' : 'mood_board_items'
+          const { error } = await supabase
+            .from(table)
+            .update({ mask_url: publicUrl })
+            .eq('id', image.id)
+            
+          if (error) throw error
+          console.log('Mask saved to DB:', publicUrl)
+      } catch (err) {
+          console.error('Failed to save mask:', err)
+      }
+  }
+
+  async function handleSAMSegment(textPrompt: string) {
+    if (!image) return
     setIsProcessing(true)
+    setToolMode('brush') // Switch back to brush immediately so cursor is normal
     
     try {
-        // 1. Fetch Blob
-        const res = await fetch(image.image_url)
-        const blob = await res.blob()
-        
-        // 2. Prepare Form Data
-        const formData = new FormData()
-        formData.append('file', blob, 'image.png')
-        formData.append('prompt', samPrompt)
-        
-        // 3. Call FastAPI
-        const apiRes = await fetch('http://localhost:8000/segment', {
+        const apiRes = await fetch('/api/segment', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                imageUrl: image.image_url,
+                prompt: textPrompt 
+            })
         })
         
-        const data = await apiRes.json()
+        const responseText = await apiRes.text()
+        let data
         
-        if (data.success && data.masks) {
-            // 4. Draw masks
-            data.masks.forEach((maskBase64: string) => {
-                canvasRef.current?.drawBase64Mask(maskBase64)
-            })
-            setSamPrompt('') // Clear prompt on success
+        try {
+            data = JSON.parse(responseText)
+        } catch (e) {
+            console.error('Failed to parse API response:', responseText)
+            alert(`API Error: ${apiRes.status} ${apiRes.statusText}\nRaw: ${responseText.substring(0, 100)}...`)
+            setIsProcessing(false)
+            return
+        }
+
+        console.log('Roboflow Response:', data)
+
+        if (apiRes.ok && data.success && data.result) {
+            const outputs = data.result.outputs
+            if (outputs && Array.isArray(outputs)) {
+                let foundMask = false
+                outputs.forEach((out: any) => {
+                    Object.values(out).forEach((val: any) => {
+                        if (val && val.type === 'base64' && val.value) {
+                            canvasRef.current?.drawBase64Mask(val.value)
+                            saveMaskToDB(val.value)
+                            setSamMaskBase64(val.value)
+                            setIsMaskVisible(true)
+                            foundMask = true
+                        }
+                    })
+                    
+                    if (!foundMask && out.image && out.image.type === 'base64') {
+                        canvasRef.current?.drawBase64Mask(out.image.value)
+                        saveMaskToDB(out.image.value)
+                        setSamMaskBase64(out.image.value)
+                        setIsMaskVisible(true)
+                        foundMask = true
+                    }
+                })
+                
+                if (!foundMask) {
+                    console.warn('No image outputs found in Roboflow response', outputs)
+                    alert('Workflow finished but returned no visual masks.')
+                }
+            } else {
+                 console.warn('Unknown Roboflow structure', data.result)
+                 alert('Segmentation finished. Check console for output.')
+            }
+            
         } else {
-            console.error('SAM Error:', data)
-            alert('Failed to segment objects. Ensure backend is running.')
+            const errorMsg = data.error || data.details || 'Unknown error'
+            console.error('Segmentation Error:', data)
+            alert(`Segmentation failed: ${errorMsg}`)
         }
         
     } catch (err) {
         console.error('SAM Request failed:', err)
-        alert('Could not connect to SAM server at localhost:8000')
+        alert('Failed to connect to segmentation service.')
     } finally {
         setIsProcessing(false)
     }
+  }
+
+  const toggleSamMask = () => {
+      if (!samMaskBase64) return
+      
+      if (isMaskVisible) {
+          clearMask()
+          setIsMaskVisible(false)
+      } else {
+          canvasRef.current?.drawBase64Mask(samMaskBase64)
+          setIsMaskVisible(true)
+      }
   }
 
   async function handleGenerate(overridePrompt?: string) {
@@ -220,25 +330,6 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
 
   const clearMask = () => {
     canvasRef.current?.clear()
-  }
-
-  async function uploadBase64Image(base64Data: string, pathPrefix: string) {
-    const res = await fetch(base64Data)
-    const blob = await res.blob()
-    const fileExt = 'png'
-    const fileName = `${pathPrefix}/${Math.random()}.${fileExt}`
-    
-    const { error: uploadError } = await supabase.storage
-      .from('uploads')
-      .upload(fileName, blob)
-
-    if (uploadError) throw uploadError
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('uploads')
-      .getPublicUrl(fileName)
-      
-    return publicUrl
   }
 
   async function getTargetFolderId() {
@@ -448,34 +539,28 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
       </div>
 
       {/* CENTER: Image Canvas */}
-      <div className="flex-1 bg-gray-100 flex items-center justify-center p-8 relative overflow-hidden">
-        <div 
-            ref={containerRef}
-            className="relative shadow-2xl rounded-lg overflow-hidden bg-white max-h-[80vh] max-w-[80vw]"
-            style={{ aspectRatio: 'auto' }} 
-        > 
+      <div className="flex-1 bg-gray-100 flex items-center justify-center p-8 overflow-auto">
+        <div className="relative inline-block shadow-2xl rounded-lg overflow-hidden bg-white">
           {/* Base Image */}
           <img 
             src={image.image_url} 
             alt={image.name || 'Edit Target'} 
             crossOrigin="anonymous"
-            className="block max-h-[80vh] w-auto h-auto object-contain pointer-events-none select-none"
-            onLoad={handleImageLoad}
-            ref={(el) => {
-                if (el && containerRef.current && (el.width !== dimensions.width || el.height !== dimensions.height)) {
-                    setDimensions({ width: el.width, height: el.height })
-                }
+            className="block max-h-[80vh] max-w-[80vw] w-auto h-auto pointer-events-none select-none"
+            onLoad={(e) => {
+                const img = e.currentTarget
+                setDimensions({ width: img.offsetWidth, height: img.offsetHeight })
             }}
           />
           
           {/* Drawing Layer */}
-          <CanvasLayer 
+          <CanvasLayer
             ref={canvasRef}
             width={dimensions.width}
             height={dimensions.height}
             brushSize={brushSize}
-            mode={toolMode === 'sam' ? 'brush' : toolMode} // If in SAM mode, canvas interaction is disabled or regular cursor
-            className={`absolute top-0 left-0 ${toolMode === 'sam' ? 'cursor-default' : 'cursor-crosshair'} opacity-70`}
+            mode={toolMode === 'sam' ? 'brush' : toolMode}
+            className="absolute top-0 left-0 opacity-70"
           />
         </div>
 
@@ -499,11 +584,18 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
                     <Scissors className="w-4 h-4" />
                  </button>
                  <button
-                    onClick={() => setToolMode('sam')}
-                    className={`p-2 rounded-full transition-colors ${toolMode === 'sam' ? 'bg-white shadow' : 'text-gray-500 hover:text-black'}`}
-                    title="AI Segmentation (SAM)"
+                    onClick={() => {
+                        if (isProcessing) return
+                        if (samMaskBase64) {
+                            toggleSamMask()
+                        } else {
+                            handleSAMSegment("all objects")
+                        }
+                    }}
+                    className={`p-2 rounded-full transition-colors ${toolMode === 'sam' || isMaskVisible ? 'bg-white shadow' : 'text-gray-500 hover:text-black'}`}
+                    title={samMaskBase64 ? (isMaskVisible ? "Hide Mask" : "Show Mask") : "Auto Segment"}
                  >
-                    <Brain className="w-4 h-4" />
+                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
                  </button>
              </div>
              
@@ -518,27 +610,6 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
                         onChange={(e) => setBrushSize(parseInt(e.target.value))}
                         className="w-24 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                     />
-                 </div>
-             )}
-
-             {toolMode === 'sam' && (
-                 <div className="flex items-center gap-2 border-l pl-4 border-gray-300">
-                    <input 
-                        type="text" 
-                        placeholder="cat, dog, car..."
-                        value={samPrompt}
-                        onChange={(e) => setSamPrompt(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSAMSegment()}
-                        className="w-48 px-2 py-1 text-sm border border-gray-300 rounded focus:border-black focus:outline-none bg-white"
-                        autoFocus
-                    />
-                    <button 
-                        onClick={handleSAMSegment}
-                        disabled={isProcessing || !samPrompt}
-                        className="bg-black text-white text-xs px-2 py-1.5 rounded hover:bg-gray-800 disabled:opacity-50"
-                    >
-                        {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Go'}
-                    </button>
                  </div>
              )}
 
@@ -582,21 +653,19 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
                 {isProcessing ? <Loader2 className="animate-spin" /> : <Wand2 className="w-5 h-5" />}
                 Generate Edit
             </button>
-            
-            {toolMode === 'lasso' && (
-                <button
-                    onClick={() => {
-                        const bgPrompt = "Remove the background of the masked object, keep the object on a transparent background"
-                        setPrompt(bgPrompt)
-                        handleGenerate(bgPrompt)
-                    }}
-                    disabled={isProcessing}
-                    className="w-full py-3 px-4 rounded-lg border-2 border-black text-black font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
-                >
-                    <Scissors className="w-4 h-4" />
-                    Remove Background
-                </button>
-            )}
+
+            <button
+                onClick={() => {
+                    const bgPrompt = "Remove the background of the masked object, keep the object on a transparent background"
+                    setPrompt(bgPrompt)
+                    handleGenerate(bgPrompt)
+                }}
+                disabled={isProcessing}
+                className="w-full py-3 px-4 rounded-lg border-2 border-black text-black font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
+                Remove Background
+            </button>
         </div>
       </div>
     </div>
