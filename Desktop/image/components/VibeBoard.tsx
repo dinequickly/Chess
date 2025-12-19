@@ -164,7 +164,7 @@ export default function VibeBoard({ sessionId }: VibeBoardProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-semibold text-gray-800">Your Vibe Board</h2>
+          <h2 className="text-2xl font-semibold text-gray-800">Your Vibe Board <span className="text-sm font-normal text-gray-500">({items.length})</span></h2>
           {sessionId && (
             <button
               type="button"
@@ -185,6 +185,9 @@ export default function VibeBoard({ sessionId }: VibeBoardProps) {
               <span className="text-gray-400">{copied ? 'copied' : 'copy'}</span>
             </button>
           )}
+          <button onClick={fetchItems} className="p-2 rounded-full hover:bg-gray-200" title="Refresh Board">
+             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+          </button>
         </div>
         <div className="relative">
           <input
@@ -213,6 +216,9 @@ export default function VibeBoard({ sessionId }: VibeBoardProps) {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {items.map((item) => (
             <div key={item.id} className="group relative aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+              <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-sm z-10 pointer-events-none">
+                  #{item.order_index}
+              </div>
               <Link href={`/editor/${item.id}`} className="block w-full h-full cursor-pointer">
                 <img
                     src={`${item.image_url}?t=${new Date().getTime()}`} 

@@ -599,10 +599,18 @@ export default function ImageEditor({ imageId }: ImageEditorProps) {
                       Discard
                   </button>
                   <button 
-                      onClick={handleReplacePhoto} 
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded shadow-lg"
+                      onClick={handleAddToBoard} 
+                      disabled={actionLoading}
+                      className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded backdrop-blur-sm border border-white/20 disabled:opacity-50 flex items-center gap-2"
                   >
-                      Keep & Save
+                      {actionLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : null} Add New
+                  </button>
+                  <button 
+                      onClick={handleReplacePhoto} 
+                      disabled={actionLoading}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded shadow-lg disabled:opacity-50 flex items-center gap-2"
+                  >
+                      {actionLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : null} Replace Original
                   </button>
               </div>
           )}

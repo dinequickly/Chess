@@ -51,7 +51,7 @@ export default function ChatPanel({ className }: { className?: string }) {
     setLoading(true)
 
     try {
-      const response = await fetch('https://maxipad.app.n8n.cloud/webhook/image', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
